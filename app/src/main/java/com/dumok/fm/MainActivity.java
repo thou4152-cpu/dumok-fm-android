@@ -14,13 +14,13 @@ public class MainActivity extends Activity {
  static final String[] MENT={"침착성","판단력","시야","오프더볼","위치선정","집중력","활동량","적극성"};
  static final String[] PHYS={"주력","가속도","민첩성","균형감각","몸싸움","점프력","지구력","타고난체력"};
  static final String[] POS={"GK","RB","CB","LB","DM","CM","AM","RW","LW","ST"};
- static class Player{
+ static class Player implements java.io.Serializable{
   String name,nation,pos,club,body,nick=""; int age,height,weight,ca,pa,fitness=100,apps,goals,value,wage;
   int[] te=new int[8],me=new int[8],ph=new int[8]; double[] xp=new double[24];
   double growth,professional,physicalRetention; int declineAge; boolean fa,starter;
  }
- static class Team{String name;int p,w,d,l,gf,ga,pts;Team(String n){name=n;}}
- static class Fixture{LocalDate date;Team h,a;boolean played;int hg,ag;Fixture(LocalDate d,Team x,Team y){date=d;h=x;a=y;}}
+ static class Team implements java.io.Serializable{String name;int p,w,d,l,gf,ga,pts;Team(String n){name=n;}}
+ static class Fixture implements java.io.Serializable{LocalDate date;Team h,a;boolean played;int hg,ag;Fixture(LocalDate d,Team x,Team y){date=d;h=x;a=y;}}
  ArrayList<Player>squad=new ArrayList<>(),pool=new ArrayList<>();ArrayList<Team>teams=new ArrayList<>();ArrayList<Fixture>fixtures=new ArrayList<>();
  Random R=new Random(4152); LocalDate now=LocalDate.of(2026,7,1); String club="DUMOK FC",formation="4-2-3-1",mentality="균형";int budget=650;
  int BG=Color.rgb(8,15,27),CARD=Color.rgb(18,29,45),GREEN=Color.rgb(48,211,145),MUTED=Color.rgb(150,166,186);
@@ -43,12 +43,67 @@ public class MainActivity extends Activity {
   {"나이지리아","Chinedu","Victor","Samuel","Ibrahim","Emeka","Okafor","Balogun","Musa","Adebayo","Eze"}
  };
 
- public void onCreate(Bundle b){super.onCreate(b);getWindow().setNavigationBarColor(BG);getWindow().setStatusBarColor(BG);seed();home();}
+ public void onCreate(Bundle b){super.onCreate(b);getWindow().setNavigationBarColor(BG);getWindow().setStatusBarColor(BG);startMenu();}
  int dp(int x){return(int)(x*getResources().getDisplayMetrics().density+.5f);}
  TextView tx(String s,int z,int c){TextView v=new TextView(this);v.setText(s);v.setTextSize(z);v.setTextColor(c);v.setPadding(dp(10),dp(7),dp(10),dp(7));return v;}
  Button bt(String s){Button b=new Button(this);b.setText(s);b.setAllCaps(false);b.setTextSize(12);return b;}
  LinearLayout card(){LinearLayout x=new LinearLayout(this);x.setOrientation(LinearLayout.VERTICAL);x.setPadding(dp(8),dp(6),dp(8),dp(6));x.setBackgroundColor(CARD);LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,-2);p.setMargins(dp(6),dp(5),dp(6),dp(5));x.setLayoutParams(p);return x;}
 
+ void startMenu(){
+  LinearLayout root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);root.setGravity(Gravity.CENTER);root.setPadding(dp(45),dp(25),dp(45),dp(25));root.setBackgroundColor(BG);
+  TextView logo=tx("DUMOK FM",32,GREEN);logo.setGravity(Gravity.CENTER);root.addView(logo,new LinearLayout.LayoutParams(-1,dp(70)));
+  TextView sub=tx("감독 커리어",15,MUTED);sub.setGravity(Gravity.CENTER);root.addView(sub,new LinearLayout.LayoutParams(-1,dp(45)));
+  boolean has=new java.io.File(getFilesDir(),"dumok_career.sav").exists();
+  Button cont=bt("이어하기"+(has?"":"  · 저장 데이터 없음"));cont.setEnabled(has);cont.setOnClickListener(v->{java.io.File sf=new java.io.File(getFilesDir(),"dumok_career.sav");if(sf.exists()){loadGame();if(!squad.isEmpty())home();}});
+  root.addView(cont,new LinearLayout.LayoutParams(dp(380),dp(65)));
+  Button fresh=bt("새 게임 시작");fresh.setOnClickListener(v->confirmNewGame());
+  LinearLayout.LayoutParams fp=new LinearLayout.LayoutParams(dp(380),dp(65));fp.setMargins(0,dp(14),0,0);root.addView(fresh,fp);
+  root.addView(tx("이어하기: 마지막 진행상황 불러오기\n새 게임: 기존 저장을 초기화하고 처음부터 시작",12,MUTED));
+  setContentView(root);
+ }
+ void confirmNewGame(){
+  new AlertDialog.Builder(this).setTitle("새 게임 시작").setMessage("기존 진행 데이터가 있다면 새 게임으로 덮어씁니다. 시작할까요?")
+   .setNegativeButton("취소",null).setPositiveButton("시작",(d,w)->newGame()).show();
+ }
+ void newGame(){
+  // A new career is a true reset: delete the complete previous save first.
+  java.io.File f=new java.io.File(getFilesDir(),"dumok_career.sav");if(f.exists())f.delete();
+  getSharedPreferences("dumok_save",0).edit().clear().apply();
+  squad.clear();pool.clear();teams.clear();fixtures.clear();for(int i=0;i<XI.length;i++)XI[i]=null;
+  now=LocalDate.of(2026,7,1);budget=650;formation="4-2-3-1";mentality="균형";
+  seed();saveGame();home();
+ }
+ static class CareerSave implements java.io.Serializable{
+  ArrayList<Player>squad,pool;ArrayList<Team>teams;ArrayList<Fixture>fixtures;
+  String date,club,formation,mentality;int budget;int[] xiIndex;
+ }
+ void saveGame(){
+  if(squad.isEmpty())return;
+  CareerSave c=new CareerSave();c.squad=new ArrayList<>(squad);c.pool=new ArrayList<>(pool);c.teams=new ArrayList<>(teams);c.fixtures=new ArrayList<>(fixtures);
+  c.date=now.toString();c.club=club;c.formation=formation;c.mentality=mentality;c.budget=budget;c.xiIndex=new int[XI.length];
+  java.util.Arrays.fill(c.xiIndex,-1);
+  for(int i=0;i<XI.length;i++)if(XI[i]!=null)c.xiIndex[i]=squad.indexOf(XI[i]);
+  java.io.File tmp=new java.io.File(getFilesDir(),"dumok_career.tmp"),dst=new java.io.File(getFilesDir(),"dumok_career.sav");
+  try(java.io.ObjectOutputStream o=new java.io.ObjectOutputStream(new java.io.BufferedOutputStream(new java.io.FileOutputStream(tmp)))){o.writeObject(c);}
+  catch(Exception ex){return;}
+  if(dst.exists())dst.delete();tmp.renameTo(dst);
+  getSharedPreferences("dumok_save",0).edit().putBoolean("hasSave",true).apply();
+ }
+ void loadGame(){
+  java.io.File f=new java.io.File(getFilesDir(),"dumok_career.sav");
+  try(java.io.ObjectInputStream in=new java.io.ObjectInputStream(new java.io.BufferedInputStream(new java.io.FileInputStream(f)))){
+   CareerSave c=(CareerSave)in.readObject();
+   squad.clear();squad.addAll(c.squad);pool.clear();pool.addAll(c.pool);teams.clear();teams.addAll(c.teams);fixtures.clear();fixtures.addAll(c.fixtures);
+   now=LocalDate.parse(c.date);club=c.club;formation=c.formation;mentality=c.mentality;budget=c.budget;
+   for(int i=0;i<XI.length;i++)XI[i]=null;
+   if(c.xiIndex!=null)for(int i=0;i<Math.min(XI.length,c.xiIndex.length);i++){int k=c.xiIndex[i];if(k>=0&&k<squad.size())XI[i]=squad.get(k);}
+   for(Player q:squad)q.starter=false;for(Player q:XI)if(q!=null)q.starter=true;
+  }catch(Exception ex){
+   // Corrupt/incompatible save: keep it untouched and start no fake continuation.
+   Toast.makeText(this,"세이브 파일을 불러오지 못했습니다.",Toast.LENGTH_LONG).show();startMenu();
+  }
+ }
+ void onStop(){super.onStop();if(!squad.isEmpty())saveGame();}
  void seed(){
   String[] ns={"DUMOK FC","JEONJU UNITED","SEOUL CITY","BUSAN ATHLETIC","INCHEON BLUE","DAEGU REDS","SUWON KNIGHTS","DAEJEON PHOENIX"};
   for(String n:ns)teams.add(new Team(n));
@@ -182,7 +237,7 @@ public class MainActivity extends Activity {
   }
   root.addView(board,new LinearLayout.LayoutParams(0,dp(455),1));body.addView(root);
   int count=0;for(Player q:XI)if(q!=null)count++;
-  body.addView(tx("선발 "+count+"/11 · 선수를 길게 눌러 원하는 색상 포지션 칸으로 드래그",12,count==11?GREEN:Color.YELLOW));
+  body.addView(tx("선발 "+count+"/11 · 선수단 또는 전술판의 선수를 길게 눌러 다른 포지션으로 드래그",12,count==11?GREEN:Color.YELLOW));
  }
  TextView playerChip(Player q){
   TextView v=tx(q.name+"\n"+q.pos+"  CA "+q.ca,11,Color.WHITE);v.setBackgroundColor(Color.rgb(24,48,62));
@@ -202,9 +257,23 @@ public class MainActivity extends Activity {
     case DragEvent.ACTION_DRAG_ENTERED: view.setAlpha(.68f);return true;
     case DragEvent.ACTION_DRAG_EXITED: view.setAlpha(1f);return true;
     case DragEvent.ACTION_DROP:
-      view.setAlpha(1f);Object o=event.getLocalState();if(o instanceof Player){Player q=(Player)o;for(int i=0;i<XI.length;i++)if(XI[i]==q)XI[i]=null;if(XI[idx]!=null)XI[idx].starter=false;XI[idx]=q;for(Player z:squad)z.starter=false;for(Player z:XI)if(z!=null)z.starter=true;tactic();}return true;
+      view.setAlpha(1f);Object o=event.getLocalState();
+      if(o instanceof Player){
+       Player q=(Player)o;int from=-1;for(int i=0;i<XI.length;i++)if(XI[i]==q){from=i;break;}
+       if(from>=0 && from!=idx){Player target=XI[idx];XI[idx]=q;XI[from]=target;} // tactical slot -> slot: swap
+       else if(from<0){if(XI[idx]!=null)XI[idx].starter=false;XI[idx]=q;}       // squad rail -> slot
+       for(Player z:squad)z.starter=false;for(Player z:XI)if(z!=null)z.starter=true;
+       saveGame();tactic();
+      }return true;
     case DragEvent.ACTION_DRAG_ENDED:view.setAlpha(1f);return true;
    }return true;
+  });
+  v.setOnLongClickListener(x->{
+   if(XI[idx]==null)return false;
+   Player moving=XI[idx];
+   android.content.ClipData data=android.content.ClipData.newPlainText("tactic-player",moving.name);
+   x.startDragAndDrop(data,new View.DragShadowBuilder(x),moving,0);
+   return true;
   });
   v.setOnClickListener(x->pickSlot(idx));return v;
  }
@@ -220,12 +289,12 @@ public class MainActivity extends Activity {
  }
  void calendar(){frame("일정");for(Fixture f:fixtures)if(!f.date.isBefore(now.minusDays(14))&&(f.h.name.equals(club)||f.a.name.equals(club))){LinearLayout c=card();c.addView(tx((f.played?"✓ ":"⚽ ")+f.date+"   "+f.h.name+" "+(f.played?f.hg+" - "+f.ag:"vs")+" "+f.a.name,14,f.played?MUTED:GREEN));body.addView(c);}}
  void market(){frame("이적시장");body.addView(tx(open()?"🟢 OPEN — 소속 선수와 FA 계약 가능":"🔴 CLOSED — FA만 계약 가능",15,open()?GREEN:MUTED));int shown=0;for(Player p:pool){if(!open()&&!p.fa)continue;LinearLayout r=card();r.setOrientation(LinearLayout.HORIZONTAL);TextView n=tx((p.fa?"[FA] ":"")+p.name+"\n"+p.nick,12,Color.WHITE);n.setOnClickListener(v->detail(p));r.addView(n,new LinearLayout.LayoutParams(0,-2,2));r.addView(tx(p.nation+" "+p.pos,12,MUTED),new LinearLayout.LayoutParams(0,-2,1));r.addView(tx(p.age+"세 "+p.height+"cm",12,MUTED),new LinearLayout.LayoutParams(0,-2,1));r.addView(tx("CA "+p.ca+" / PA "+p.pa,12,GREEN),new LinearLayout.LayoutParams(0,-2,1));Button b=bt(p.fa?"자유계약":"영입 "+p.value+"억");b.setOnClickListener(v->sign(p));r.addView(b,new LinearLayout.LayoutParams(0,-2,1));body.addView(r);if(++shown>=70)break;}}
- void sign(Player p){if(!p.fa&&!open()){Toast.makeText(this,"이적시장 기간이 아닙니다",0).show();return;}int fee=p.fa?0:p.value;if(budget<fee){Toast.makeText(this,"예산 부족",0).show();return;}budget-=fee;p.fa=false;p.club=club;squad.add(p);pool.remove(p);market();}
+ void sign(Player p){if(!p.fa&&!open()){Toast.makeText(this,"이적시장 기간이 아닙니다",0).show();return;}int fee=p.fa?0:p.value;if(budget<fee){Toast.makeText(this,"예산 부족",0).show();return;}budget-=fee;p.fa=false;p.club=club;squad.add(p);pool.remove(p);saveGame();market();}
  void league(){frame("리그");ArrayList<Team>a=new ArrayList<>(teams);Collections.sort(a,(x,y)->y.pts!=x.pts?y.pts-x.pts:(y.gf-y.ga)-(x.gf-x.ga));int i=1;for(Team t:a){body.addView(tx(i+++"  "+t.name+"   "+t.p+"경기   "+t.w+"승 "+t.d+"무 "+t.l+"패   "+t.gf+":"+t.ga+"   "+t.pts+"점",14,t.name.equals(club)?GREEN:Color.WHITE));}}
  void advance(boolean event){
   Fixture f=next();if(f!=null&&f.date.equals(now)){match(f);return;}LocalDate target=now.plusDays(1);if(event&&f!=null)target=f.date;
   while(now.isBefore(target)){now=now.plusDays(1);dailyGrowth();}
-  f=next();if(f!=null&&f.date.equals(now))match(f);else home();
+  f=next();if(f!=null&&f.date.equals(now))match(f);else{saveGame();home();}
  }
  void dailyGrowth(){
   for(Player p:squad){
@@ -302,7 +371,7 @@ public class MainActivity extends Activity {
  }
  double teamAttack(){double s=0;int n=0;for(Player p:squad)if(p.starter){double run=p.ph[0]*1.4+p.ph[1]*1.5+p.me[3]*1.3;double tech=p.te[0]*1.5+p.te[1]+p.te[2]+p.me[0];s+=run+tech;n++;}return n==0?0:s/n;}
  void awardMatchXP(boolean attack){for(Player p:squad)if(p.starter){int[] cand=p.pos.equals("ST")||p.pos.equals("RW")||p.pos.equals("LW")?new int[]{0,1,2,8,11,16,17,18}:new int[]{3,10,9,14,22};int idx=cand[R.nextInt(cand.length)];if(idx>=16&&p.age>20)idx=R.nextInt(16);p.xp[idx]+=2.0*p.growth*p.professional;p.apps++;}}
- void finish(Fixture f,int x,int y){f.played=true;f.hg=x;f.ag=y;result(f.h,f.a,x,y);for(Fixture q:fixtures)if(!q.played&&q.date.equals(f.date)){int a=R.nextInt(4),b=R.nextInt(4);q.played=true;q.hg=a;q.ag=b;result(q.h,q.a,a,b);}for(Player p:squad)if(p.starter)p.fitness=Math.max(55,p.fitness-6-R.nextInt(10));now=now.plusDays(1);}
+ void finish(Fixture f,int x,int y){f.played=true;f.hg=x;f.ag=y;result(f.h,f.a,x,y);for(Fixture q:fixtures)if(!q.played&&q.date.equals(f.date)){int a=R.nextInt(4),b=R.nextInt(4);q.played=true;q.hg=a;q.ag=b;result(q.h,q.a,a,b);}for(Player p:squad)if(p.starter)p.fitness=Math.max(55,p.fitness-6-R.nextInt(10));now=now.plusDays(1);saveGame();}
  void result(Team h,Team a,int x,int y){h.p++;a.p++;h.gf+=x;h.ga+=y;a.gf+=y;a.ga+=x;if(x>y){h.w++;a.l++;h.pts+=3;}else if(x<y){a.w++;h.l++;a.pts+=3;}else{h.d++;a.d++;h.pts++;a.pts++;}}
 
  static class SmoothPitch extends View{
@@ -322,8 +391,13 @@ public class MainActivity extends Activity {
   }
   Runnable anim=new Runnable(){public void run(){
    for(int i=0;i<20;i++){float dx=dest[i][0]-xy[i][0],dy=dest[i][1]-xy[i][1];vel[i][0]=vel[i][0]*.86f+dx*.018f;vel[i][1]=vel[i][1]*.86f+dy*.018f;float vm=(float)Math.sqrt(vel[i][0]*vel[i][0]+vel[i][1]*vel[i][1]),mx=.0068f;if(vm>mx){vel[i][0]=vel[i][0]/vm*mx;vel[i][1]=vel[i][1]/vm*mx;}xy[i][0]+=vel[i][0];xy[i][1]+=vel[i][1];}
-   if(ballFlying){float dx=btx-bx,dy=bty-by,dist=(float)Math.sqrt(dx*dx+dy*dy);float sp=state==4?.040f:state==3?.026f:state==2?.023f:.019f;if(dist>sp){bx+=dx/dist*sp;by+=dy/dist*sp;}else{bx=btx;by=bty;}}
-   else {bx+=(xy[owner][0]-bx)*.42f;by+=(xy[owner][1]-by)*.42f;}
+   if(ballFlying){
+    // Normal passes track the receiver continuously. Through balls/crosses deliberately target space.
+    if((state==1||state==3)&&receiver>=0){btx=xy[receiver][0];bty=xy[receiver][1];}
+    float dx=btx-bx,dy=bty-by,dist=(float)Math.sqrt(dx*dx+dy*dy);float sp=state==4?.036f:state==3?.024f:state==2?.021f:.017f;
+    if(dist>sp){bx+=dx/dist*sp;by+=dy/dist*sp;}else{bx=btx;by=bty;}
+   }
+   else {float footX=xy[owner][0]+(owner<10?.010f:-.010f),footY=xy[owner][1]+.008f;bx+=(footX-bx)*.34f;by+=(footY-by)*.34f;}
    if(!ballFlying && state==0 && h.getLooper()!=null){ // micro-adjust continuously between decisions
     boolean blue=owner<10;float carrierX=xy[owner][0],carrierY=xy[owner][1];int b=blue?0:10;
     for(int j=0;j<20;j++)if(j!=owner){boolean same=(j<10)==blue;float sx=(carrierX-.5f)*(same?.30f:.20f);dest[j][0]=clip(base[j][0]+sx);if(!same)dest[j][1]=clip(base[j][1]+(carrierY-base[j][1])*.16f);}
@@ -332,28 +406,33 @@ public class MainActivity extends Activity {
   }};
   void step(){
    ticks++; lastPossessionBlue=owner<10;
-   if(state==1||state==2){if(closeBall()){owner=receiver;ballFlying=false;state=0;eventText=stateName(owner)+" 패스 성공";newLog=true;shape();}return;}
-   if(state==3){if(closeBall()){owner=receiver;ballFlying=false;state=0;eventText="크로스 연결";newLog=true;shape();}return;}
+   if(state==1){if(closeBall()){owner=receiver;receiver=-1;ballFlying=false;state=0;eventText=stateName(owner)+" 패스 성공";newLog=true;shape();}return;}
+   if(state==2){
+    if(receiver>=0){dest[receiver][0]=btx;dest[receiver][1]=bty;float dx=bx-xy[receiver][0],dy=by-xy[receiver][1];
+     if(dx*dx+dy*dy<.00075f){owner=receiver;receiver=-1;ballFlying=false;state=0;eventText="스루패스 연결";newLog=true;shape();}}
+    return;
+   }
+   if(state==3){if(closeBall()){owner=receiver;receiver=-1;ballFlying=false;state=0;eventText="크로스 연결";newLog=true;shape();}return;}
    if(state==4){ // shot must physically reach goal before outcome exists
     if(closeBall()){
      boolean blue=lastEventBlue;shotFlag=true;
      boolean on=r.nextFloat()<.68f;
      if(on){onTargetFlag=true;boolean goal=r.nextFloat()<.27f;
        if(goal){goalFlag=true;state=6;eventText="⚽ GOAL!";newLog=true;ballFlying=false;bx=blue?.985f:.015f;by=.5f;ticks=0;}
-       else{state=5;eventText="🧤 골키퍼 선방";newLog=true;owner=blue?10:0;ballFlying=false;ticks=0;}
-     }else{state=5;eventText="슛이 골문을 벗어납니다";newLog=true;owner=blue?10:0;ballFlying=false;ticks=0;}
+       else{state=5;eventText="🧤 골키퍼 선방";newLog=true;owner=blue?10:0;receiver=-1;ballFlying=false;ticks=0;}
+     }else{state=5;eventText="슛이 골문을 벗어납니다";newLog=true;owner=blue?10:0;receiver=-1;ballFlying=false;ticks=0;}
     }return;
    }
    if(state==5){if(ticks%12==0){state=0;eventText="골키퍼가 다시 전개합니다";shape();}return;}
    if(state==6){if(ticks>22){resetKickoff(lastEventBlue?10:0);}return;}
 
-   if(ticks%7!=0)return;
+   if(ticks%4!=0)return;
    shape();
    boolean blue=owner<10;int b=blue?0:10,local=owner-b;float x=xy[owner][0],progress=blue?x:1-x;
 
    // Defenders can actually win the ball when close to carrier.
    int opp=nearestOpponent(owner);float dx=xy[opp][0]-x,dy=xy[opp][1]-xy[owner][1];
-   if(dx*dx+dy*dy<.0055f&&r.nextFloat()<.22f){owner=opp;eventText="태클 성공 · 소유권 전환";newLog=true;shape();return;}
+   if(dx*dx+dy*dy<.0055f&&r.nextFloat()<.22f){owner=opp;receiver=-1;ballFlying=false;eventText="태클 성공 · 소유권 전환";newLog=true;shape();return;}
 
    // Final third: visible shot only from plausible positions.
    if(progress>.73f && Math.abs(xy[owner][1]-.5f)<.30f && r.nextFloat()<.34f){shoot(blue);return;}
@@ -362,7 +441,7 @@ public class MainActivity extends Activity {
    // Midfielders sometimes send a through ball into space for an attacker to chase.
    if((local==5||local==6||local==8)&&progress>.42f&&r.nextFloat()<.30f){through(blue);return;}
    // Carrier may dribble a short distance; ball remains visibly at feet.
-   if(r.nextFloat()<.24f){float dir=blue?.055f:-.055f;dest[owner][0]=clip(x+dir);dest[owner][1]=clip(xy[owner][1]+(r.nextFloat()-.5f)*.08f);eventText="드리블 전진";return;}
+   if(r.nextFloat()<.24f){float dir=blue?.055f:-.055f;dest[owner][0]=clip(x+dir*.65f);dest[owner][1]=clip(xy[owner][1]+(r.nextFloat()-.5f)*.045f);eventText="드리블 전진";return;}
    pass(blue);
   }
   void pass(boolean blue){
@@ -380,12 +459,15 @@ public class MainActivity extends Activity {
    btx=dest[receiver][0];bty=dest[receiver][1];state=3;lastEventBlue=blue;ballFlying=true;eventText="⤴ 크로스";newLog=true;
   }
   void shoot(boolean blue){
-   state=4;lastEventBlue=blue;ballFlying=true;btx=blue?.985f:.015f;bty=.38f+r.nextFloat()*.24f;eventText="💥 슈팅!";newLog=true;
+   receiver=-1;state=4;lastEventBlue=blue;ballFlying=true;btx=blue?.985f:.015f;bty=.38f+r.nextFloat()*.24f;eventText="💥 슈팅!";newLog=true;
   }
-  boolean closeBall(){return Math.abs(bx-btx)<.014f&&Math.abs(by-bty)<.014f;}
+  boolean closeBall(){
+   if(receiver>=0&&(state==1||state==3)){float dx=bx-xy[receiver][0],dy=by-xy[receiver][1];return dx*dx+dy*dy<.00055f;}
+   return Math.abs(bx-btx)<.014f&&Math.abs(by-bty)<.014f;
+  }
   boolean consumeShot(){boolean q=shotFlag;shotFlag=false;return q;} boolean consumeOnTarget(){boolean q=onTargetFlag;onTargetFlag=false;return q;} boolean consumeGoal(){boolean q=goalFlag;goalFlag=false;return q;}
   String stateName(int i){return i<10?"BLUE":"RED";}
-  void resetKickoff(int team){owner=team+6;state=0;ballFlying=false;bx=.5f;by=.5f;xy[owner][0]=dest[owner][0]=.5f;xy[owner][1]=dest[owner][1]=.5f;eventText="센터서클에서 킥오프";newLog=true;ticks=0;shape();}
+  void resetKickoff(int team){owner=team+6;receiver=-1;state=0;ballFlying=false;bx=.5f;by=.5f;xy[owner][0]=dest[owner][0]=.5f;xy[owner][1]=dest[owner][1]=.5f;eventText="센터서클에서 킥오프";newLog=true;ticks=0;shape();}
   int nearestOpponent(int me){int lo=me<10?10:0,hi=lo+10,best=lo;float bd=99;for(int i=lo;i<hi;i++){float dx=xy[i][0]-xy[me][0],dy=xy[i][1]-xy[me][1],d=dx*dx+dy*dy;if(d<bd){bd=d;best=i;}}return best;}
   void shape(){
    boolean blue=owner<10;float ballx=xy[owner][0],bally=xy[owner][1];
