@@ -24,6 +24,8 @@ public class MainActivity extends Activity {
  ArrayList<Player>squad=new ArrayList<>(),pool=new ArrayList<>();ArrayList<Team>teams=new ArrayList<>();ArrayList<Fixture>fixtures=new ArrayList<>();
  Random R=new Random(4152); LocalDate now=LocalDate.of(2026,7,1); String club="DUMOK FC",formation="4-2-3-1",mentality="균형";int budget=650;
  int BG=Color.rgb(8,15,27),CARD=Color.rgb(18,29,45),GREEN=Color.rgb(48,211,145),MUTED=Color.rgb(150,166,186);
+ String[] SLOT={"GK","LB","LCB","CB","RCB","RB","LDM","DM","RDM","LCM","CM","RCM","LAM","AM","RAM","LW","LST","ST","RST","RW"};
+ Player[] XI=new Player[SLOT.length];
  LinearLayout main,side,body;
 
  String[][] NM={
@@ -51,6 +53,8 @@ public class MainActivity extends Activity {
   String[] ns={"DUMOK FC","JEONJU UNITED","SEOUL CITY","BUSAN ATHLETIC","INCHEON BLUE","DAEGU REDS","SUWON KNIGHTS","DAEJEON PHOENIX"};
   for(String n:ns)teams.add(new Team(n));
   for(int i=0;i<25;i++){Player p=gen(false,club,true);p.starter=i<11;squad.add(p);}
+  // Default shape only for first launch; user can freely rebuild it on the tactics board.
+  int[] ds={0,1,2,4,5,9,11,13,15,17,19}; for(int i=0;i<11;i++)XI[ds[i]]=squad.get(i);
   for(int i=0;i<3500;i++){boolean fa=R.nextInt(100)<18;pool.add(gen(fa,fa?"FA":ns[1+R.nextInt(ns.length-1)],false));}
   schedule();
  }
@@ -153,8 +157,31 @@ public class MainActivity extends Activity {
  }
  LinearLayout attrCol(String title,String[] names,int[] a){LinearLayout c=card();c.addView(tx(title,16,GREEN));for(int i=0;i<a.length;i++)c.addView(tx(names[i]+"   "+a[i],13,col(a[i])));return c;}
  int col(int x){if(x>=18)return GREEN;if(x>=15)return Color.rgb(170,235,120);if(x>=11)return Color.rgb(245,210,90);if(x>=6)return Color.WHITE;return MUTED;}
- void tactic(){frame("전술");LinearLayout c=card();c.addView(tx("포메이션 "+formation+" / 멘탈리티 "+mentality,18,Color.WHITE));c.addView(tx("V3 매치엔진은 선수 CA 하나가 아니라 패스·시야·판단력, 주력·가속도·오프더볼, 헤딩·점프·몸싸움 등의 조합을 사용합니다.",13,MUTED));body.addView(c);}
- void calendar(){frame("일정");for(Fixture f:fixtures)if(!f.date.isBefore(now.minusDays(14))&&(f.h.name.equals(club)||f.a.name.equals(club))){LinearLayout c=card();c.addView(tx((f.played?"✓ ":"⚽ ")+f.date+"   "+f.h.name+" "+(f.played?f.hg+" - "+f.ag:"vs")+" "+f.a.name,14,f.played?MUTED:GREEN));body.addView(c);}}
+ void tactic(){
+  frame("전술 · 자유 배치");
+  LinearLayout note=card();note.addView(tx("포메이션 프리셋 없음 · 원하는 위치 11칸에 직접 선수를 배치하세요.",14,Color.WHITE));
+  note.addView(tx("빈 칸을 누르면 선수 선택 / 배치된 칸을 누르면 교체 또는 제외",12,MUTED));body.addView(note);
+  LinearLayout pitch=new LinearLayout(this);pitch.setOrientation(LinearLayout.VERTICAL);pitch.setPadding(dp(12),dp(10),dp(12),dp(10));pitch.setBackgroundColor(Color.rgb(31,108,65));
+  String[][] rows={{"LW","LST","ST","RST","RW"},{"LAM","AM","RAM"},{"LCM","CM","RCM"},{"LDM","DM","RDM"},{"LB","LCB","CB","RCB","RB"},{"GK"}};
+  for(String[] row:rows){LinearLayout rr=new LinearLayout(this);rr.setGravity(Gravity.CENTER);
+   for(String sl:row){int idx=slotIndex(sl);Button q=bt(slotLabel(idx));q.setTextSize(10);q.setMinWidth(dp(95));q.setOnClickListener(v->pickSlot(idx));rr.addView(q,new LinearLayout.LayoutParams(0,dp(58),1));}
+   pitch.addView(rr,new LinearLayout.LayoutParams(-1,dp(62)));
+  }
+  body.addView(pitch);
+  int count=0;for(Player q:XI)if(q!=null)count++;
+  body.addView(tx("현재 배치 "+count+"/11명 · 이 위치가 경기 시작 위치와 팀 형태에 직접 반영됩니다.",13,count==11?GREEN:Color.YELLOW));
+ }
+ int slotIndex(String n){for(int i=0;i<SLOT.length;i++)if(SLOT[i].equals(n))return i;return 0;}
+ String slotLabel(int i){Player q=XI[i];return SLOT[i]+"\n"+(q==null?"＋ 빈 칸":q.name+"\n"+q.pos+(q.pos.equals(SLOT[i])||SLOT[i].contains(q.pos)?"":" ⚠"));}
+ void pickSlot(int idx){
+  final Dialog d=new Dialog(this);LinearLayout box=new LinearLayout(this);box.setOrientation(LinearLayout.VERTICAL);box.setPadding(dp(10),dp(10),dp(10),dp(10));box.setBackgroundColor(BG);
+  box.addView(tx(SLOT[idx]+" 위치 선수 선택",17,Color.WHITE));
+  if(XI[idx]!=null){Button rm=bt("현재 선수 제외 · "+XI[idx].name);rm.setOnClickListener(v->{XI[idx].starter=false;XI[idx]=null;d.dismiss();tactic();});box.addView(rm);}
+  ScrollView sv=new ScrollView(this);LinearLayout list=new LinearLayout(this);list.setOrientation(LinearLayout.VERTICAL);
+  for(Player q:squad){boolean used=false;for(Player z:XI)if(z==q)used=true;if(used&&XI[idx]!=q)continue;
+   Button bb=bt(q.name+"   "+q.pos+"   CA "+q.ca+"   "+q.height+"cm");bb.setOnClickListener(v->{if(XI[idx]!=null)XI[idx].starter=false;XI[idx]=q;for(Player z:squad)z.starter=false;for(Player z:XI)if(z!=null)z.starter=true;d.dismiss();tactic();});list.addView(bb);}
+  sv.addView(list);box.addView(sv,new LinearLayout.LayoutParams(dp(470),dp(430)));d.setContentView(box);d.show();
+ } void calendar(){frame("일정");for(Fixture f:fixtures)if(!f.date.isBefore(now.minusDays(14))&&(f.h.name.equals(club)||f.a.name.equals(club))){LinearLayout c=card();c.addView(tx((f.played?"✓ ":"⚽ ")+f.date+"   "+f.h.name+" "+(f.played?f.hg+" - "+f.ag:"vs")+" "+f.a.name,14,f.played?MUTED:GREEN));body.addView(c);}}
  void market(){frame("이적시장");body.addView(tx(open()?"🟢 OPEN — 소속 선수와 FA 계약 가능":"🔴 CLOSED — FA만 계약 가능",15,open()?GREEN:MUTED));int shown=0;for(Player p:pool){if(!open()&&!p.fa)continue;LinearLayout r=card();r.setOrientation(LinearLayout.HORIZONTAL);TextView n=tx((p.fa?"[FA] ":"")+p.name+"\n"+p.nick,12,Color.WHITE);n.setOnClickListener(v->detail(p));r.addView(n,new LinearLayout.LayoutParams(0,-2,2));r.addView(tx(p.nation+" "+p.pos,12,MUTED),new LinearLayout.LayoutParams(0,-2,1));r.addView(tx(p.age+"세 "+p.height+"cm",12,MUTED),new LinearLayout.LayoutParams(0,-2,1));r.addView(tx("CA "+p.ca+" / PA "+p.pa,12,GREEN),new LinearLayout.LayoutParams(0,-2,1));Button b=bt(p.fa?"자유계약":"영입 "+p.value+"억");b.setOnClickListener(v->sign(p));r.addView(b,new LinearLayout.LayoutParams(0,-2,1));body.addView(r);if(++shown>=70)break;}}
  void sign(Player p){if(!p.fa&&!open()){Toast.makeText(this,"이적시장 기간이 아닙니다",0).show();return;}int fee=p.fa?0:p.value;if(budget<fee){Toast.makeText(this,"예산 부족",0).show();return;}budget-=fee;p.fa=false;p.club=club;squad.add(p);pool.remove(p);market();}
  void league(){frame("리그");ArrayList<Team>a=new ArrayList<>(teams);Collections.sort(a,(x,y)->y.pts!=x.pts?y.pts-x.pts:(y.gf-y.ga)-(x.gf-x.ga));int i=1;for(Team t:a){body.addView(tx(i+++"  "+t.name+"   "+t.p+"경기   "+t.w+"승 "+t.d+"무 "+t.l+"패   "+t.gf+":"+t.ga+"   "+t.pts+"점",14,t.name.equals(club)?GREEN:Color.WHITE));}}
@@ -175,21 +202,66 @@ public class MainActivity extends Activity {
   }
  }
  void raise(Player p,int idx){if(idx<8)p.te[idx]=clamp(p.te[idx]+1);else if(idx<16)p.me[idx-8]=clamp(p.me[idx-8]+1);else if(p.age<=20)p.ph[idx-16]=clamp(p.ph[idx-16]+1);p.ca=Math.min(p.pa,calcCA(p));}
+ float[][] tacticalCoords(){
+  ArrayList<float[]> a=new ArrayList<>();String[][] map={{"GK","0.06","0.50"},{"LB","0.20","0.86"},{"LCB","0.20","0.65"},{"CB","0.19","0.50"},{"RCB","0.20","0.35"},{"RB","0.20","0.14"},{"LDM","0.34","0.66"},{"DM","0.33","0.50"},{"RDM","0.34","0.34"},{"LCM","0.45","0.66"},{"CM","0.45","0.50"},{"RCM","0.45","0.34"},{"LAM","0.57","0.66"},{"AM","0.58","0.50"},{"RAM","0.57","0.34"},{"LW","0.68","0.88"},{"LST","0.70","0.64"},{"ST","0.72","0.50"},{"RST","0.70","0.36"},{"RW","0.68","0.12"}};
+  for(String[] m:map){int k=slotIndex(m[0]);if(XI[k]!=null)a.add(new float[]{Float.parseFloat(m[1]),Float.parseFloat(m[2])});}
+  while(a.size()<10)a.add(new float[]{.42f+(a.size()%3)*.08f,.20f+(a.size()%5)*.15f});
+  float[][] out=new float[10][2];for(int i=0;i<10;i++)out[i]=a.get(i);return out;
+ }
  void match(Fixture f){
-  final Dialog d=new Dialog(this,android.R.style.Theme_Black_NoTitleBar_Fullscreen);LinearLayout all=new LinearLayout(this);all.setOrientation(LinearLayout.HORIZONTAL);all.setBackgroundColor(BG);
-  SmoothPitch pitch=new SmoothPitch(this);all.addView(pitch,new LinearLayout.LayoutParams(0,-1,3));
-  LinearLayout panel=new LinearLayout(this);panel.setOrientation(LinearLayout.VERTICAL);TextView score=tx(f.h.name+"\n0 - 0\n"+f.a.name+"\n0'",19,Color.WHITE);score.setGravity(Gravity.CENTER);panel.addView(score);TextView log=tx("킥오프",13,MUTED);panel.addView(log);Button speed=bt("속도 x1");panel.addView(speed);all.addView(panel,new LinearLayout.LayoutParams(0,-1,1));d.setContentView(all);d.show();
-  int[] min={0},hg={0},ag={0},delay={600};Handler H=new Handler(Looper.getMainLooper());
-  Runnable tick=new Runnable(){public void run(){
-   min[0]+=2;pitch.newPlay();
-   double attack=teamAttack();
-   if(R.nextDouble()<.055+attack/5000.0){if(f.h.name.equals(club))hg[0]++;else ag[0]++;log.setText(min[0]+"'  ⚽ DUMOK FC 득점 장면");awardMatchXP(true);}
-   if(R.nextDouble()<.055){if(f.h.name.equals(club))ag[0]++;else hg[0]++;log.setText(min[0]+"'  상대팀 득점");}
-   score.setText(f.h.name+"\n"+hg[0]+" - "+ag[0]+"\n"+f.a.name+"\n"+Math.min(90,min[0])+"'");
-   if(min[0]>=90){finish(f,hg[0],ag[0]);speed.setText("경기 종료");speed.setOnClickListener(v->{d.dismiss();home();});}
-   else H.postDelayed(this,delay[0]);
+  final Dialog d=new Dialog(this,android.R.style.Theme_Black_NoTitleBar_Fullscreen);
+  LinearLayout all=new LinearLayout(this);all.setOrientation(LinearLayout.HORIZONTAL);all.setBackgroundColor(BG);
+  SmoothPitch pitch=new SmoothPitch(this, tacticalCoords());
+  all.addView(pitch,new LinearLayout.LayoutParams(0,-1,4));
+  LinearLayout panel=new LinearLayout(this);panel.setOrientation(LinearLayout.VERTICAL);panel.setPadding(dp(8),dp(8),dp(8),dp(8));panel.setBackgroundColor(Color.rgb(10,20,32));
+  TextView score=tx(f.h.name+"\n0 - 0\n"+f.a.name,20,Color.WHITE);score.setGravity(Gravity.CENTER);panel.addView(score);
+  TextView clock=tx("00:00",18,GREEN);clock.setGravity(Gravity.CENTER);panel.addView(clock);
+  TextView action=tx("KICK OFF",15,Color.WHITE);action.setGravity(Gravity.CENTER);panel.addView(action);
+  TextView stats=tx("슈팅 0 - 0\n유효슈팅 0 - 0\n점유율 50% - 50%",13,MUTED);panel.addView(stats);
+  TextView log=tx("경기가 시작됩니다.",12,MUTED);panel.addView(log,new LinearLayout.LayoutParams(-1,0,1));
+  Button speed=bt("속도 x1");panel.addView(speed);all.addView(panel,new LinearLayout.LayoutParams(0,-1,1));
+  d.setContentView(all);d.show();
+
+  final int[] sec={0},hg={0},ag={0},shotsH={0},shotsA={0},sotH={0},sotA={0},possH={0},possA={0},delay={55};
+  final boolean homeIsBlue=f.h.name.equals(club);
+  Handler H=new Handler(Looper.getMainLooper());
+
+  Runnable game=new Runnable(){public void run(){
+    // Engine runs in small football-time steps. Score can ONLY change after pitch reports a real goal event.
+    sec[0]+=4;
+    pitch.step();
+
+    if(pitch.lastPossessionBlue){if(homeIsBlue)possH[0]++;else possA[0]++;}else{if(homeIsBlue)possA[0]++;else possH[0]++;}
+
+    if(pitch.consumeShot()){
+      boolean blue=pitch.lastEventBlue;
+      if((blue&&homeIsBlue)||(!blue&&!homeIsBlue))shotsH[0]++;else shotsA[0]++;
+    }
+    if(pitch.consumeOnTarget()){
+      boolean blue=pitch.lastEventBlue;
+      if((blue&&homeIsBlue)||(!blue&&!homeIsBlue))sotH[0]++;else sotA[0]++;
+    }
+    if(pitch.consumeGoal()){
+      boolean blue=pitch.lastEventBlue;
+      if((blue&&homeIsBlue)||(!blue&&!homeIsBlue))hg[0]++;else ag[0]++;
+      awardMatchXP(true);
+    }
+
+    int mm=Math.min(90,sec[0]/60),ss=sec[0]%60;
+    score.setText(f.h.name+"\n"+hg[0]+" - "+ag[0]+"\n"+f.a.name);
+    clock.setText(String.format(java.util.Locale.US,"%02d:%02d",mm,ss));
+    action.setText(pitch.eventText);
+    int tot=possH[0]+possA[0],ph=tot==0?50:(100*possH[0]/tot);
+    stats.setText("슈팅 "+shotsH[0]+" - "+shotsA[0]+"\n유효슈팅 "+sotH[0]+" - "+sotA[0]+"\n점유율 "+ph+"% - "+(100-ph)+"%");
+    if(pitch.newLog){log.setText(pitch.eventText+"\n\n"+log.getText());pitch.newLog=false;}
+
+    if(sec[0]>=5400){
+      finish(f,hg[0],ag[0]);action.setText("FULL TIME");
+      speed.setText("경기 종료");speed.setOnClickListener(v->{d.dismiss();home();});
+    }else H.postDelayed(this,delay[0]);
   }};
-  speed.setOnClickListener(v->{delay[0]=delay[0]==600?220:delay[0]==220?90:600;speed.setText(delay[0]==600?"속도 x1":delay[0]==220?"속도 x2":"속도 x3");});H.postDelayed(tick,700);
+  speed.setOnClickListener(v->{delay[0]=delay[0]==55?28:delay[0]==28?12:55;speed.setText(delay[0]==55?"속도 x1":delay[0]==28?"속도 x2":"속도 x3");});
+  H.postDelayed(game,500);
  }
  double teamAttack(){double s=0;int n=0;for(Player p:squad)if(p.starter){double run=p.ph[0]*1.4+p.ph[1]*1.5+p.me[3]*1.3;double tech=p.te[0]*1.5+p.te[1]+p.te[2]+p.me[0];s+=run+tech;n++;}return n==0?0:s/n;}
  void awardMatchXP(boolean attack){for(Player p:squad)if(p.starter){int[] cand=p.pos.equals("ST")||p.pos.equals("RW")||p.pos.equals("LW")?new int[]{0,1,2,8,11,16,17,18}:new int[]{3,10,9,14,22};int idx=cand[R.nextInt(cand.length)];if(idx>=16&&p.age>20)idx=R.nextInt(16);p.xp[idx]+=2.0*p.growth*p.professional;p.apps++;}}
@@ -198,68 +270,112 @@ public class MainActivity extends Activity {
 
  static class SmoothPitch extends View{
   Paint p=new Paint(1); Random r=new Random();
-  // 0-9 blue: GK,RB,RCB,LCB,LB,DM,CM,RW,AM,LW/ST hybrid; 10-19 red mirror
-  float[][] xy=new float[20][2], home=new float[20][2], target=new float[20][2];
-  int owner=0, phase=0, receiver=-1; float bx,by,btx,bty; boolean ballFlying=false;
+  float[][] xy=new float[20][2], base=new float[20][2], dest=new float[20][2];
+  float bx=.5f,by=.5f,btx=.5f,bty=.5f; int owner=0,receiver=-1,state=0,ticks=0;
+  // states: 0 possession, 1 pass, 2 through ball, 3 cross, 4 shot, 5 save/reset, 6 goal celebration
+  boolean ballFlying=false,lastPossessionBlue=true,lastEventBlue=true,shotFlag,onTargetFlag,goalFlag,newLog=true;
+  String eventText="KICK OFF";
   Handler h=new Handler(Looper.getMainLooper());
-  SmoothPitch(Context c){
+  SmoothPitch(Context c,float[][] userShape){
    super(c);
-   float[][] shape={{.07f,.50f},{.22f,.18f},{.20f,.38f},{.20f,.62f},{.22f,.82f},{.35f,.43f},{.43f,.58f},{.57f,.15f},{.60f,.50f},{.68f,.78f}};
-   for(int i=0;i<10;i++){home[i][0]=shape[i][0];home[i][1]=shape[i][1];home[i+10][0]=1-shape[i][0];home[i+10][1]=1-shape[i][1];}
-   for(int i=0;i<20;i++){xy[i][0]=target[i][0]=home[i][0];xy[i][1]=target[i][1]=home[i][1];}
-   owner=0; bx=xy[owner][0];by=xy[owner][1]; h.post(anim);
+   float[][] f={{.055f,.50f},{.22f,.18f},{.20f,.38f},{.20f,.62f},{.22f,.82f},{.36f,.40f},{.43f,.60f},{.61f,.16f},{.64f,.50f},{.61f,.84f}};
+   for(int i=0;i<10;i++){float ux=(userShape!=null&&i<userShape.length)?userShape[i][0]:f[i][0],uy=(userShape!=null&&i<userShape.length)?userShape[i][1]:f[i][1];base[i][0]=ux;base[i][1]=uy;base[i+10][0]=1-f[i][0];base[i+10][1]=1-f[i][1];}
+   for(int i=0;i<20;i++){xy[i][0]=dest[i][0]=base[i][0];xy[i][1]=dest[i][1]=base[i][1];}
+   owner=0;bx=xy[0][0];by=xy[0][1];h.post(anim);
   }
   Runnable anim=new Runnable(){public void run(){
-   for(int i=0;i<20;i++){xy[i][0]+=(target[i][0]-xy[i][0])*.055f;xy[i][1]+=(target[i][1]-xy[i][1])*.055f;}
-   if(ballFlying){bx+=(btx-bx)*.16f;by+=(bty-by)*.16f;if(Math.abs(bx-btx)<.012&&Math.abs(by-bty)<.012){owner=receiver;receiver=-1;ballFlying=false;}}
-   else {bx+=(xy[owner][0]-bx)*.30f;by+=(xy[owner][1]-by)*.30f;}
+   for(int i=0;i<20;i++){float dx=dest[i][0]-xy[i][0],dy=dest[i][1]-xy[i][1],dist=(float)Math.sqrt(dx*dx+dy*dy);float sp=dist>.12f?.0105f:.0065f;if(dist>sp){xy[i][0]+=dx/dist*sp;xy[i][1]+=dy/dist*sp;}else{xy[i][0]=dest[i][0];xy[i][1]=dest[i][1];}}
+   if(ballFlying){float dx=btx-bx,dy=bty-by,dist=(float)Math.sqrt(dx*dx+dy*dy);float sp=state==4?.040f:state==3?.026f:state==2?.023f:.019f;if(dist>sp){bx+=dx/dist*sp;by+=dy/dist*sp;}else{bx=btx;by=bty;}}
+   else {bx+=(xy[owner][0]-bx)*.42f;by+=(xy[owner][1]-by)*.42f;}
    invalidate();h.postDelayed(this,16);
   }};
-  void newPlay(){
-   // Every match tick advances a coherent possession phase rather than teleporting 20 random dots.
-   phase++;
-   int team=owner<10?0:1, base=team*10;
-   if(phase%7==0 && r.nextFloat()<.28f){ // turnover: nearest-ish opponent wins it
-    int k=base==0?10:0; owner=k+1+r.nextInt(8); ballFlying=false; shapeAroundBall(); return;
+  void step(){
+   ticks++; lastPossessionBlue=owner<10;
+   if(state==1||state==2){if(closeBall()){owner=receiver;ballFlying=false;state=0;eventText=stateName(owner)+" 패스 성공";newLog=true;shape();}return;}
+   if(state==3){if(closeBall()){owner=receiver;ballFlying=false;state=0;eventText="크로스 연결";newLog=true;shape();}return;}
+   if(state==4){ // shot must physically reach goal before outcome exists
+    if(closeBall()){
+     boolean blue=lastEventBlue;shotFlag=true;
+     boolean on=r.nextFloat()<.68f;
+     if(on){onTargetFlag=true;boolean goal=r.nextFloat()<.27f;
+       if(goal){goalFlag=true;state=6;eventText="⚽ GOAL!";newLog=true;ballFlying=false;bx=blue?.985f:.015f;by=.5f;ticks=0;}
+       else{state=5;eventText="🧤 골키퍼 선방";newLog=true;owner=blue?10:0;ballFlying=false;ticks=0;}
+     }else{state=5;eventText="슛이 골문을 벗어납니다";newLog=true;owner=blue?10:0;ballFlying=false;ticks=0;}
+    }return;
    }
-   int local=owner-base;
-   int nextLocal;
-   if(local==0) nextLocal=2+r.nextInt(3);             // GK -> CB/FB
-   else if(local<=4) nextLocal=r.nextBoolean()?5:6;   // back line -> midfield
-   else if(local<=6) nextLocal=7+r.nextInt(3);        // midfield -> attacking line
-   else { // final third: recycle, combine, or drive toward goal
-    if(r.nextFloat()<.42f){target[owner][0]=team==0?.88f:.12f;target[owner][1]=.35f+r.nextFloat()*.30f;shapeAroundBall();return;}
-    nextLocal=7+r.nextInt(3);
-   }
-   if(nextLocal==local)nextLocal=6;
-   receiver=base+nextLocal;btx=xy[receiver][0];bty=xy[receiver][1];ballFlying=true;shapeAroundBall();
+   if(state==5){if(ticks%12==0){state=0;eventText="골키퍼가 다시 전개합니다";shape();}return;}
+   if(state==6){if(ticks>22){resetKickoff(lastEventBlue?10:0);}return;}
+
+   if(ticks%7!=0)return;
+   shape();
+   boolean blue=owner<10;int b=blue?0:10,local=owner-b;float x=xy[owner][0],progress=blue?x:1-x;
+
+   // Defenders can actually win the ball when close to carrier.
+   int opp=nearestOpponent(owner);float dx=xy[opp][0]-x,dy=xy[opp][1]-xy[owner][1];
+   if(dx*dx+dy*dy<.0055f&&r.nextFloat()<.22f){owner=opp;eventText="태클 성공 · 소유권 전환";newLog=true;shape();return;}
+
+   // Final third: visible shot only from plausible positions.
+   if(progress>.73f && Math.abs(xy[owner][1]-.5f)<.30f && r.nextFloat()<.34f){shoot(blue);return;}
+   // Wide attackers/fullbacks cross from wide final-third positions.
+   if(progress>.62f && (xy[owner][1]<.28f||xy[owner][1]>.72f) && r.nextFloat()<.42f){cross(blue);return;}
+   // Midfielders sometimes send a through ball into space for an attacker to chase.
+   if((local==5||local==6||local==8)&&progress>.42f&&r.nextFloat()<.30f){through(blue);return;}
+   // Carrier may dribble a short distance; ball remains visibly at feet.
+   if(r.nextFloat()<.24f){float dir=blue?.055f:-.055f;dest[owner][0]=clip(x+dir);dest[owner][1]=clip(xy[owner][1]+(r.nextFloat()-.5f)*.08f);eventText="드리블 전진";return;}
+   pass(blue);
   }
-  void shapeAroundBall(){
-   boolean blue=owner<10;float ballX=bx;
-   for(int i=0;i<20;i++){
-    boolean same=(i<10)==blue;
-    float hx=home[i][0],hy=home[i][1];
-    float shift=(ballX-.5f)*(same?.34f:.24f);
-    // Team in possession expands; defending team compresses around ball.
-    target[i][0]=clip(hx+shift);
-    if(same) target[i][1]=clip(hy+(hy-.5f)*.08f);
-    else target[i][1]=clip(hy+(by-hy)*.20f);
-   }
-   // Ball carrier and nearby support preserve local triangles.
-   target[owner][0]=clip(bx+(blue?.045f:-.045f));target[owner][1]=clip(by);
-   int b=blue?0:10;
-   target[b+5][1]=clip(by-.12f);target[b+6][1]=clip(by+.12f);
+  void pass(boolean blue){
+   int b=blue?0:10,local=owner-b;int[] opts;
+   if(local==0)opts=new int[]{1,2,3,4}; else if(local<=4)opts=new int[]{5,6}; else if(local<=6)opts=new int[]{7,8,9}; else opts=new int[]{5,6,7,8,9};
+   int n=opts[r.nextInt(opts.length)];if(n==local)n=6;receiver=b+n;state=1;lastEventBlue=blue;
+   btx=xy[receiver][0];bty=xy[receiver][1];ballFlying=true;eventText="→ 패스";newLog=true;
   }
-  float clip(float v){return Math.max(.045f,Math.min(.955f,v));}
+  void through(boolean blue){
+   int b=blue?0:10;receiver=b+7+r.nextInt(3);float dir=blue?.12f:-.12f;
+   dest[receiver][0]=clip(xy[receiver][0]+dir);btx=dest[receiver][0];bty=dest[receiver][1];state=2;lastEventBlue=blue;ballFlying=true;eventText="⇢ 스루패스!";newLog=true;
+  }
+  void cross(boolean blue){
+   int b=blue?0:10;receiver=b+8;dest[receiver][0]=blue?.83f:.17f;dest[receiver][1]=.48f;
+   btx=dest[receiver][0];bty=dest[receiver][1];state=3;lastEventBlue=blue;ballFlying=true;eventText="⤴ 크로스";newLog=true;
+  }
+  void shoot(boolean blue){
+   state=4;lastEventBlue=blue;ballFlying=true;btx=blue?.985f:.015f;bty=.38f+r.nextFloat()*.24f;eventText="💥 슈팅!";newLog=true;
+  }
+  boolean closeBall(){return Math.abs(bx-btx)<.014f&&Math.abs(by-bty)<.014f;}
+  boolean consumeShot(){boolean q=shotFlag;shotFlag=false;return q;} boolean consumeOnTarget(){boolean q=onTargetFlag;onTargetFlag=false;return q;} boolean consumeGoal(){boolean q=goalFlag;goalFlag=false;return q;}
+  String stateName(int i){return i<10?"BLUE":"RED";}
+  void resetKickoff(int team){owner=team+6;state=0;ballFlying=false;bx=.5f;by=.5f;xy[owner][0]=dest[owner][0]=.5f;xy[owner][1]=dest[owner][1]=.5f;eventText="센터서클에서 킥오프";newLog=true;ticks=0;shape();}
+  int nearestOpponent(int me){int lo=me<10?10:0,hi=lo+10,best=lo;float bd=99;for(int i=lo;i<hi;i++){float dx=xy[i][0]-xy[me][0],dy=xy[i][1]-xy[me][1],d=dx*dx+dy*dy;if(d<bd){bd=d;best=i;}}return best;}
+  void shape(){
+   boolean blue=owner<10;float ballx=xy[owner][0],bally=xy[owner][1];
+   for(int i=0;i<20;i++){boolean att=(i<10)==blue;float shift=(ballx-.5f)*(att?.32f:.22f);dest[i][0]=clip(base[i][0]+shift);dest[i][1]=clip(base[i][1]+(att?(base[i][1]-.5f)*.05f:(bally-base[i][1])*.18f));}
+   // Support triangles, overlapping width and compact defensive block.
+   int b=blue?0:10,ob=blue?10:0;
+   dest[b+5][0]=clip(dest[b+5][0]+(blue?.035f:-.035f));dest[b+5][1]=clip(bally-.11f);
+   dest[b+6][0]=clip(dest[b+6][0]+(blue?.055f:-.055f));dest[b+6][1]=clip(bally+.11f);
+   // wide players offer outlets instead of all chasing the ball
+   dest[b+7][1]=.14f;dest[b+9][1]=.86f;
+   // nearest defender presses, next defender covers
+   int n=nearestOpponent(owner);dest[n][0]=clip(xy[owner][0]+(blue?.035f:-.035f));dest[n][1]=clip(xy[owner][1]);
+   int cover=ob+5;dest[cover][0]=clip(base[cover][0]+(ballx-.5f)*.18f);dest[cover][1]=clip(.5f+(bally-.5f)*.35f);
+  }
+  float clip(float v){return Math.max(.035f,Math.min(.965f,v));}
   protected void onDraw(Canvas c){
-   float w=getWidth(),h=getHeight();c.drawColor(Color.rgb(32,116,67));
-   p.setStyle(Paint.Style.FILL);p.setColor(Color.argb(28,255,255,255));for(int i=0;i<10;i+=2)c.drawRect(i*w/10,0,(i+1)*w/10,h,p);
-   p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(3);p.setColor(Color.WHITE);c.drawRect(10,10,w-10,h-10,p);c.drawLine(w/2,10,w/2,h-10,p);c.drawCircle(w/2,h/2,Math.min(w,h)*.12f,p);
-   c.drawRect(10,h*.27f,w*.16f,h*.73f,p);c.drawRect(w*.84f,h*.27f,w-10,h*.73f,p);
-   c.drawRect(10,h*.38f,w*.07f,h*.62f,p);c.drawRect(w*.93f,h*.38f,w-10,h*.62f,p);
+   float w=getWidth(),h=getHeight();c.drawColor(Color.rgb(12,20,27));
+   float l=dpv(18),t=dpv(14),rr=w-dpv(18),bb=h-dpv(14),fw=rr-l,fh=bb-t;
+   p.setStyle(Paint.Style.FILL);p.setColor(Color.rgb(34,126,72));c.drawRect(l,t,rr,bb,p);
+   p.setColor(Color.argb(25,255,255,255));for(int i=0;i<10;i+=2)c.drawRect(l+i*fw/10,t,l+(i+1)*fw/10,bb,p);
+   p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(dpv(2));p.setColor(Color.WHITE);c.drawRect(l,t,rr,bb,p);c.drawLine(l+fw/2,t,l+fw/2,bb,p);c.drawCircle(l+fw/2,t+fh/2,fh*.12f,p);
+   c.drawRect(l,t+fh*.27f,l+fw*.16f,t+fh*.73f,p);c.drawRect(l+fw*.84f,t+fh*.27f,rr,t+fh*.73f,p);
+   c.drawRect(l,t+fh*.39f,l+fw*.065f,t+fh*.61f,p);c.drawRect(l+fw*.935f,t+fh*.39f,rr,t+fh*.61f,p);
+   // visible goals/net
+   p.setColor(Color.LTGRAY);c.drawRect(l-dpv(10),t+fh*.43f,l,t+fh*.57f,p);c.drawRect(rr,t+fh*.43f,rr+dpv(10),t+fh*.57f,p);
    p.setStyle(Paint.Style.FILL);
-   for(int i=0;i<20;i++){p.setColor(i<10?Color.rgb(65,145,255):Color.rgb(245,75,75));c.drawCircle(xy[i][0]*w,xy[i][1]*h,10,p);p.setColor(Color.WHITE);p.setTextSize(11);c.drawText(""+(i%10+1),xy[i][0]*w-4,xy[i][1]*h+4,p);}
-   p.setColor(Color.WHITE);c.drawCircle(bx*w,by*h,5,p);
+   for(int i=0;i<20;i++){float px=l+xy[i][0]*fw,py=t+xy[i][1]*fh;p.setColor(Color.argb(70,0,0,0));c.drawCircle(px+2,py+3,dpv(10),p);p.setColor(i<10?Color.rgb(40,130,255):Color.rgb(235,64,64));c.drawCircle(px,py,dpv(9),p);p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(2);p.setColor(Color.WHITE);c.drawCircle(px,py,dpv(9),p);p.setStyle(Paint.Style.FILL);p.setColor(Color.WHITE);p.setTextSize(dpv(9));c.drawText(""+(i%10+1),px-dpv(3),py+dpv(3),p);}
+   // football: white body + black panels, not a plain dot
+   float px=l+bx*fw,py=t+by*fh;p.setColor(Color.WHITE);c.drawCircle(px,py,dpv(6),p);p.setColor(Color.BLACK);c.drawCircle(px,py,dpv(2.2f),p);for(int k=0;k<5;k++){double a=k*Math.PI*2/5;c.drawCircle(px+(float)Math.cos(a)*dpv(3.7f),py+(float)Math.sin(a)*dpv(3.7f),dpv(1.1f),p);}
+   if(eventText.contains("슈팅")||eventText.contains("GOAL")){p.setTextSize(dpv(18));p.setColor(Color.WHITE);p.setFakeBoldText(true);c.drawText(eventText,l+fw*.43f,t+dpv(28),p);p.setFakeBoldText(false);}
   }
+  float dpv(float x){return x*getResources().getDisplayMetrics().density;}
  }
 }
