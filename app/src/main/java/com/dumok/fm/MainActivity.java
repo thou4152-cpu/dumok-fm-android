@@ -26,6 +26,7 @@ public class MainActivity extends Activity {
  int BG=Color.rgb(8,15,27),CARD=Color.rgb(18,29,45),GREEN=Color.rgb(48,211,145),MUTED=Color.rgb(150,166,186);
  String[] SLOT={"GK","LB","LCB","CB","RCB","RB","LDM","DM","RDM","LCM","CM","RCM","LAM","AM","RAM","LW","LST","ST","RST","RW"};
  Player[] XI=new Player[SLOT.length];
+ String[] XIROLE=new String[SLOT.length], XIINST=new String[SLOT.length];
  LinearLayout main,side,body;
 
  String[][] NM={
@@ -220,6 +221,26 @@ public class MainActivity extends Activity {
  }
  LinearLayout attrCol(String title,String[] names,int[] a){LinearLayout c=card();c.addView(tx(title,16,GREEN));for(int i=0;i<a.length;i++)c.addView(tx(names[i]+"   "+a[i],13,col(a[i])));return c;}
  int col(int x){if(x>=18)return GREEN;if(x>=15)return Color.rgb(170,235,120);if(x>=11)return Color.rgb(245,210,90);if(x>=6)return Color.WHITE;return MUTED;}
+ String defaultRole(String sl){String p=baseSlot(sl);if(p.equals("ST"))return "침투형 공격수";if(p.equals("LW")||p.equals("RW"))return "인사이드 포워드";if(p.equals("AM"))return "플레이메이커";if(p.equals("CM"))return "박스투박스";if(p.equals("DM"))return "수비형 미드필더";if(p.equals("LB")||p.equals("RB"))return "풀백";if(p.equals("CB"))return "센터백";return "골키퍼";}
+ String roleAt(int i){if(XIROLE[i]==null)XIROLE[i]=defaultRole(SLOT[i]);return XIROLE[i];}
+ String instAt(int i){if(XIINST[i]==null)XIINST[i]="균형";return XIINST[i];}
+ void roleDialog(int idx){
+  if(XI[idx]==null){pickSlot(idx);return;}final Dialog d=new Dialog(this);LinearLayout b=new LinearLayout(this);b.setOrientation(LinearLayout.VERTICAL);b.setPadding(dp(12),dp(12),dp(12),dp(12));b.setBackgroundColor(BG);
+  b.addView(tx(XI[idx].name+" · "+SLOT[idx],18,Color.WHITE));b.addView(tx("역할은 움직임 성향, 능력치는 실행 품질을 결정",11,MUTED));
+  String p=baseSlot(SLOT[idx]);String[] rr;
+  if(p.equals("ST"))rr=new String[]{"침투형 공격수","타겟맨","연계형 공격수","내려오는 공격수","만능형"};
+  else if(p.equals("LW")||p.equals("RW"))rr=new String[]{"인사이드 포워드","윙어","와이드 플레이메이커","침투형 윙어"};
+  else if(p.equals("AM"))rr=new String[]{"플레이메이커","세컨드 스트라이커","공격형 미드필더"};
+  else if(p.equals("CM"))rr=new String[]{"박스투박스","플레이메이커","전진형 미드필더","중앙 미드필더"};
+  else if(p.equals("DM"))rr=new String[]{"수비형 미드필더","딥라잉 플레이메이커","볼위닝 미드필더"};
+  else if(p.equals("LB")||p.equals("RB"))rr=new String[]{"풀백","공격형 풀백","수비형 풀백"};
+  else if(p.equals("CB"))rr=new String[]{"센터백","스토퍼","커버","빌드업 센터백"};else rr=new String[]{"골키퍼","스위퍼 키퍼"};
+  for(String r0:rr){Button x=bt((r0.equals(roleAt(idx))?"✓ ":"")+r0);x.setOnClickListener(v->{XIROLE[idx]=r0;d.dismiss();tactic();});b.addView(x);}
+  b.addView(tx("개인지시",14,Color.WHITE));for(String in:new String[]{"균형","더 자주 침투","공 받으러 내려오기","측면으로 벌리기","중앙으로 침투","드리블 적극적","슈팅 적극적","압박 적극적"}){Button x=bt((in.equals(instAt(idx))?"✓ ":"")+in);x.setOnClickListener(v->{XIINST[idx]=in;d.dismiss();tactic();});b.addView(x);}
+  Button ch=bt("선수 변경");ch.setOnClickListener(v->{d.dismiss();pickSlot(idx);});b.addView(ch);d.setContentView(b);d.show();
+ }
+ String[] matchRoles(){ArrayList<String>a=new ArrayList<>();for(int i=0;i<XI.length;i++)if(XI[i]!=null)a.add(roleAt(i));return a.toArray(new String[0]);}
+ String[] matchInst(){ArrayList<String>a=new ArrayList<>();for(int i=0;i<XI.length;i++)if(XI[i]!=null)a.add(instAt(i));return a.toArray(new String[0]);}
  void tactic(){
   frame("전술 · 드래그 배치");
   LinearLayout root=new LinearLayout(this);root.setOrientation(LinearLayout.HORIZONTAL);root.setPadding(dp(8),dp(6),dp(8),dp(6));
@@ -348,7 +369,7 @@ public class MainActivity extends Activity {
 
   final Dialog d=new Dialog(this,android.R.style.Theme_Black_NoTitleBar_Fullscreen);
   LinearLayout all=new LinearLayout(this);all.setOrientation(LinearLayout.HORIZONTAL);all.setBackgroundColor(BG);
-  SmoothPitch pitch=new SmoothPitch(this, tacticalCoords(), matchProfiles());
+  SmoothPitch pitch=new SmoothPitch(this, tacticalCoords(), matchProfiles(), matchRoles(), matchInst());
   all.addView(pitch,new LinearLayout.LayoutParams(0,-1,4));
   LinearLayout panel=new LinearLayout(this);panel.setOrientation(LinearLayout.VERTICAL);panel.setPadding(dp(8),dp(8),dp(8),dp(8));panel.setBackgroundColor(Color.rgb(10,20,32));
   TextView score=tx(f.h.name+"\n0 - 0\n"+f.a.name,20,Color.WHITE);score.setGravity(Gravity.CENTER);panel.addView(score);
@@ -407,7 +428,7 @@ public class MainActivity extends Activity {
 
  static class SmoothPitch extends View{
   Paint p=new Paint(1); Random r=new Random();
-  Player[] simPlayer=new Player[22];
+  Player[] simPlayer=new Player[22]; String[] simRole=new String[22],simInst=new String[22];
   float[][] xy=new float[22][2], base=new float[22][2], dest=new float[22][2], vel=new float[22][2];
    float[] thinkOffset=new float[22], runBias=new float[22], laneBias=new float[22], aggression=new float[22];
    int[] roleState=new int[22]; int animFrame=0;
@@ -416,9 +437,9 @@ public class MainActivity extends Activity {
   boolean ballFlying=false,lastPossessionBlue=true,lastEventBlue=true,shotFlag,onTargetFlag,goalFlag,newLog=true;
   String eventText="KICK OFF";
   Handler h=new Handler(Looper.getMainLooper());
-  SmoothPitch(Context c,float[][] userShape,Player[] userPlayers){
+  SmoothPitch(Context c,float[][] userShape,Player[] userPlayers,String[] userRoles,String[] userInst){
    super(c);
-   if(userPlayers!=null)for(int i=0;i<11&&i<userPlayers.length;i++)simPlayer[i]=userPlayers[i];
+   if(userPlayers!=null)for(int i=0;i<11&&i<userPlayers.length;i++)simPlayer[i]=userPlayers[i];if(userRoles!=null)for(int i=0;i<11&&i<userRoles.length;i++)simRole[i]=userRoles[i];if(userInst!=null)for(int i=0;i<11&&i<userInst.length;i++)simInst[i]=userInst[i];
    float[][] f={{.055f,.50f},{.20f,.14f},{.19f,.38f},{.19f,.62f},{.20f,.86f},{.35f,.38f},{.35f,.62f},{.52f,.18f},{.55f,.50f},{.52f,.82f},{.70f,.50f}};
    for(int i=0;i<11;i++){float ux=(userShape!=null&&i<userShape.length)?userShape[i][0]:f[i][0],uy=(userShape!=null&&i<userShape.length)?userShape[i][1]:f[i][1];base[i][0]=ux;base[i][1]=uy;base[i+11][0]=1-f[i][0];base[i+11][1]=1-f[i][1];}
    for(int i=0;i<22;i++){xy[i][0]=dest[i][0]=base[i][0];xy[i][1]=dest[i][1]=base[i][1];}
@@ -507,9 +528,9 @@ public class MainActivity extends Activity {
    // Final third: attackers become goal-seeking instead of endlessly recycling possession.
    int ownLocal=owner%11;
    if(finalThird(blue,x) && ownLocal>=8 && !ballFlying){
-    int opp=nearestOpponent(owner);float dd=dist(owner,opp);
-    if(dd<.12f && r.nextFloat()<.48f){startDribbleDuel(opp);return;}
-    float urge=.24f+.52f*finishQ(owner);if((blue?x>.76f:x<.24f)&&r.nextFloat()<urge){shoot(blue);return;}
+    int duelOpp=nearestOpponent(owner);float dd=dist(owner,duelOpp);
+    if(dd<.12f && r.nextFloat()<Math.max(.18f,Math.min(.78f,.40f+.25f*attack1v1(owner)+dribbleRole(owner)))){startDribbleDuel(duelOpp);return;}
+    float urge=Math.max(.18f,Math.min(.88f,.24f+.52f*finishQ(owner)+shootRole(owner)));if((blue?x>.76f:x<.24f)&&r.nextFloat()<urge){shoot(blue);return;}
    }
    // Final third: visible shot only from plausible positions.
    if(progress>.73f && Math.abs(xy[owner][1]-.5f)<.30f && r.nextFloat()<.34f){shoot(blue);return;}
@@ -580,6 +601,11 @@ public class MainActivity extends Activity {
   String styleOf(int i){float speed=A(i,"pace")+A(i,"acc"),tech=A(i,"dri")+A(i,"touch")+A(i,"pass"),target=A(i,"str")+A(i,"jump")+A(i,"head");
    if(target>=46)return tech>=42?"연계형 타겟":"타겟맨";if(speed>=32&&A(i,"off")>=13)return "침투형";if(tech>=45&&A(i,"agi")>=14)return "테크니션";return "균형형";
   }
+  String R(int i){if(i<11&&simRole[i]!=null)return simRole[i];int l=i%11;if(l==9)return "침투형 공격수";if(l==8||l==10)return "인사이드 포워드";return "균형형";}
+  String I(int i){return i<11&&simInst[i]!=null?simInst[i]:"균형";}
+  float runRole(int i){String r=R(i),n=I(i);float x=0;if(r.contains("침투")||r.equals("세컨드 스트라이커")||r.equals("공격형 풀백"))x+=.18f;if(r.contains("타겟")||r.contains("내려오는"))x-=.12f;if(n.equals("더 자주 침투")||n.equals("중앙으로 침투"))x+=.15f;if(n.equals("공 받으러 내려오기"))x-=.18f;return x;}
+  float dribbleRole(int i){String r=R(i),n=I(i);return (r.contains("인사이드")||r.contains("윙어")||r.contains("만능")?.10f:0f)+(n.equals("드리블 적극적")?.18f:0f);}
+  float shootRole(int i){String r=R(i),n=I(i);return (r.contains("스트라이커")||r.equals("세컨드 스트라이커")?.10f:0f)+(n.equals("슈팅 적극적")?.18f:0f);}
   void updateIndependentMovement(){
    boolean blue=owner<11;float dir=blue?1f:-1f;float ballX=ballFlying?bx:xy[owner][0],ballY=ballFlying?by:xy[owner][1];
    int attackBase=blue?0:11, defendBase=blue?11:0;
@@ -611,13 +637,13 @@ public class MainActivity extends Activity {
         boolean carrierIsWide=(owner%11==8||owner%11==10);
         if(local==9){ // striker: threaten goal first
           if(final3){
-            float rq=runQ(j),goalDepth=.82f+.09f*rq;tx=blue?goalDepth:1-goalDepth;
+            float rq=runQ(j),goalDepth=.82f+.09f*rq+.035f*runRole(j);tx=blue?goalDepth:1-goalDepth;
             ty=clip((ballY<.5f?.43f:.57f)+(r.nextFloat()-.5f)*(.12f*(1-rq)));
             if(carrierIsWide){float d=.86f+.07f*rq;tx=blue?d:1-d;}
             roleState[j]=2;
           }else{
             // alternate checking short with spinning in behind
-            float rq=runQ(j);boolean run=((animFrame/70+j)%100)<(35+(int)(rq*55));
+            float rq=runQ(j);boolean run=((animFrame/70+j)%100)<(35+(int)(rq*55)+(int)(runRole(j)*35));
             tx=clip(ballX+dir*(run?(.10f+.15f*rq):-.045f));ty=clip(.5f+laneBias[j]*(1f-rq*.55f));roleState[j]=run?1:3;
           }
         }else{ // wide forwards: diagonal runs, back-post attacks, occasional width
@@ -629,7 +655,7 @@ public class MainActivity extends Activity {
               tx=blue?.90f:.10f;ty=left?.38f:.62f;roleState[j]=2;
             }
           }else{
-            float rq=runQ(j);boolean diagonal=((animFrame/85+j)%100)<(30+(int)(rq*60));
+            float rq=runQ(j);boolean diagonal=((animFrame/85+j)%100)<(30+(int)(rq*60)+(int)(runRole(j)*30));
             tx=clip(ballX+dir*(diagonal?(.10f+.11f*rq):.065f));
             ty=diagonal?(left?.34f:.66f):(left?.16f:.84f);
             roleState[j]=diagonal?1:6;
