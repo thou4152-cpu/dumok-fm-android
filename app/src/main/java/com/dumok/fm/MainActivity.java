@@ -431,6 +431,7 @@ public class MainActivity extends Activity {
   Player[] simPlayer=new Player[22]; String[] simRole=new String[22],simInst=new String[22];
   float[][] xy=new float[22][2], base=new float[22][2], dest=new float[22][2], vel=new float[22][2];
    float[] thinkOffset=new float[22], runBias=new float[22], laneBias=new float[22], aggression=new float[22];
+   float[] stridePhase=new float[22],headingX=new float[22],headingY=new float[22];
    int[] roleState=new int[22]; int animFrame=0;
   float bx=.5f,by=.5f,btx=.5f,bty=.5f; int owner=0,receiver=-1,state=0,ticks=0,dribbleDef=-1,dribblePhase=0;
   // states: 0 possession, 1 pass, 2 through ball, 3 cross, 4 shot, 5 save/reset, 6 goal celebration, 7 one-v-one dribble
@@ -444,14 +445,14 @@ public class MainActivity extends Activity {
    for(int i=0;i<11;i++){float ux=(userShape!=null&&i<userShape.length)?userShape[i][0]:f[i][0],uy=(userShape!=null&&i<userShape.length)?userShape[i][1]:f[i][1];base[i][0]=ux;base[i][1]=uy;base[i+11][0]=1-f[i][0];base[i+11][1]=1-f[i][1];}
    for(int i=0;i<22;i++){xy[i][0]=dest[i][0]=base[i][0];xy[i][1]=dest[i][1]=base[i][1];}
    for(int i=0;i<22;i++){thinkOffset[i]=r.nextFloat()*60f;runBias[i]=.78f+r.nextFloat()*.48f;laneBias[i]=(r.nextFloat()-.5f)*.12f;aggression[i]=.72f+r.nextFloat()*.55f;}
+   for(int i=0;i<22;i++){stridePhase[i]=r.nextFloat()*6.28f;headingX[i]=1f;}
    owner=0;bx=xy[0][0];by=xy[0][1];h.post(anim);
   }
   Runnable anim=new Runnable(){public void run(){
    animFrame++;
-   for(int i=0;i<22;i++){float dx=dest[i][0]-xy[i][0],dy=dest[i][1]-xy[i][1];float accN=norm(A(i,"acc")),paceN=norm(A(i,"pace")),agiN=norm(A(i,"agi")),staN=norm(A(i,"sta"));
-    float accel=.0105f+.0080f*accN+.0025f*agiN,damping=.825f+.035f*agiN;
-    vel[i][0]=vel[i][0]*damping+dx*accel;vel[i][1]=vel[i][1]*damping+dy*accel;
-    float vm=(float)Math.sqrt(vel[i][0]*vel[i][0]+vel[i][1]*vel[i][1]),mx=.0047f+.0035f*paceN+.0007f*staN;if(vm>mx){vel[i][0]=vel[i][0]/vm*mx;vel[i][1]=vel[i][1]/vm*mx;}xy[i][0]+=vel[i][0];xy[i][1]+=vel[i][1];}
+   for(int i=0;i<22;i++){float dx=dest[i][0]-xy[i][0],dy=dest[i][1]-xy[i][1];float accN=norm(A(i,"acc")),paceN=norm(A(i,"pace")),agiN=norm(A(i,"agi")),dl=(float)Math.sqrt(dx*dx+dy*dy);
+    if(dl>.0025f){float nx=dx/dl,ny=dy/dl,dot=headingX[i]*nx+headingY[i]*ny;boolean turn=dot<.35f;int cadence=Math.max(1,turn?4-(int)(agiN*2):(roleState[i]==1||roleState[i]==2||roleState[i]==4?2:3));if((animFrame+i*2)%cadence==0){float stride=(roleState[i]==1||roleState[i]==2||roleState[i]==4?(.0062f+.0048f*paceN):(.0038f+.0028f*paceN))*(.82f+.28f*accN);if(turn)stride*=.48f+.35f*agiN;float step=Math.min(dl,stride);xy[i][0]+=nx*step;xy[i][1]+=ny*step;headingX[i]=nx;headingY[i]=ny;}}
+    vel[i][0]=0;vel[i][1]=0;separateKeeper(i);}
    if(ballFlying){
     // Normal passes track the receiver continuously. Through balls/crosses deliberately target space.
     if((state==1||state==3)&&receiver>=0){btx=xy[receiver][0];bty=xy[receiver][1];}
@@ -462,6 +463,9 @@ public class MainActivity extends Activity {
    if(state==0 && h.getLooper()!=null && animFrame%3==0) updateIndependentMovement();
    invalidate();h.postDelayed(this,16);
   }};
+  boolean inGoalMouth(int i){boolean b=i<11;return (b?xy[i][0]>.925f:xy[i][0]<.075f)&&xy[i][1]>.39f&&xy[i][1]<.61f;}
+  boolean inBox(int i){boolean b=i<11;return (b?xy[i][0]>.80f:xy[i][0]<.20f)&&xy[i][1]>.25f&&xy[i][1]<.75f;}
+  void separateKeeper(int i){if(i%11==0)return;boolean b=i<11;int g=b?11:0;float dx=xy[i][0]-xy[g][0],dy=xy[i][1]-xy[g][1],d=(float)Math.sqrt(dx*dx+dy*dy);if(d<.035f){float nx=d>.001f?dx/d:(b?-1f:1f),ny=d>.001f?dy/d:0f;xy[i][0]=clip(xy[g][0]+nx*.037f);xy[i][1]=clip(xy[g][1]+ny*.037f);}}
   void step(){
    ticks++; lastPossessionBlue=owner<11;
    if(state==1){if(closeBall()){owner=receiver;receiver=-1;ballFlying=false;state=0;eventText=stateName(owner)+" 패스 성공";newLog=true;shape();}return;}
@@ -528,8 +532,8 @@ public class MainActivity extends Activity {
    // Final third: attackers become goal-seeking instead of endlessly recycling possession.
    int ownLocal=owner%11;
    if(finalThird(blue,x) && ownLocal>=8 && !ballFlying){
-    int duelOpp=nearestOpponent(owner);float dd=dist(owner,duelOpp);
-    if(dd<.12f && r.nextFloat()<Math.max(.18f,Math.min(.78f,.40f+.25f*attack1v1(owner)+dribbleRole(owner)))){startDribbleDuel(duelOpp);return;}
+    int duelOpp=nearestOpponent(owner);float dd=dist(owner,duelOpp);if(inBox(owner)){int enemyGK=blue?11:0;if(dist(owner,enemyGK)<.095f||inGoalMouth(owner)){shoot(blue);return;}}
+    if(duelOpp%11!=0&&!inGoalMouth(owner)&&dd<.12f&&r.nextFloat()<Math.max(.18f,Math.min(.78f,.40f+.25f*attack1v1(owner)+dribbleRole(owner)))){startDribbleDuel(duelOpp);return;}
     float urge=Math.max(.18f,Math.min(.88f,.24f+.52f*finishQ(owner)+shootRole(owner)));if((blue?x>.76f:x<.24f)&&r.nextFloat()<urge){shoot(blue);return;}
    }
    // Final third: visible shot only from plausible positions.
@@ -637,7 +641,7 @@ public class MainActivity extends Activity {
         boolean carrierIsWide=(owner%11==8||owner%11==10);
         if(local==9){ // striker: threaten goal first
           if(final3){
-            float rq=runQ(j),goalDepth=.82f+.09f*rq+.035f*runRole(j);tx=blue?goalDepth:1-goalDepth;
+            float rq=runQ(j),goalDepth=Math.min(.905f,.82f+.075f*rq+.025f*runRole(j));tx=blue?goalDepth:1-goalDepth;
             ty=clip((ballY<.5f?.43f:.57f)+(r.nextFloat()-.5f)*(.12f*(1-rq)));
             if(carrierIsWide){float d=.86f+.07f*rq;tx=blue?d:1-d;}
             roleState[j]=2;
