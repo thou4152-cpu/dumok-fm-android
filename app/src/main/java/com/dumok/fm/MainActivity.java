@@ -15,7 +15,7 @@ public class MainActivity extends Activity {
  static final String[] PHYS={"주력","가속도","민첩성","균형감각","몸싸움","점프력","지구력","타고난체력"};
  static final String[] POS={"GK","RB","CB","LB","DM","CM","AM","RW","LW","ST"};
  static class Player implements java.io.Serializable{
-  String name,nation,pos,club,body,nick=""; int age,height,weight,ca,pa,fitness=100,apps,goals,value,wage;
+  String name,nation,pos,club,body,nick="",preferredFoot="오른발"; int weakFoot=8,age,height,weight,ca,pa,fitness=100,apps,goals,value,wage;
   int[] te=new int[8],me=new int[8],ph=new int[8]; double[] xp=new double[24];
   double growth,professional,physicalRetention; int declineAge; boolean fa,starter;
  }
@@ -24,7 +24,7 @@ public class MainActivity extends Activity {
  ArrayList<Player>squad=new ArrayList<>(),pool=new ArrayList<>();ArrayList<Team>teams=new ArrayList<>();ArrayList<Fixture>fixtures=new ArrayList<>();
  Random R=new Random(4152); LocalDate now=LocalDate.of(2026,7,1); String club="DUMOK FC",formation="4-2-3-1",mentality="균형";int budget=650;
  int BG=Color.rgb(8,15,27),CARD=Color.rgb(18,29,45),GREEN=Color.rgb(48,211,145),MUTED=Color.rgb(150,166,186);
- String[] SLOT={"GK","LB","LCB","CB","RCB","RB","LDM","DM","RDM","LCM","CM","RCM","LAM","AM","RAM","LW","LST","ST","RST","RW"};
+ String[] SLOT={"GK","LB","LCB","CB","RCB","RB","LDM","DM","RDM","LCM","CM","RCM","LAM","AM","RAM","LW","LR","ST","RS","RW"};
  Player[] XI=new Player[SLOT.length];
  String[] XIROLE=new String[SLOT.length], XIINST=new String[SLOT.length];
  LinearLayout main,side,body;
@@ -133,9 +133,40 @@ public class MainActivity extends Activity {
   double bmi2=p.weight*10000.0/(p.height*p.height);p.body=bmi2<21.5?"마름":bmi2>24.0?"건장":"보통";
   p.growth=.65+R.nextDouble()*.8;p.professional=.65+R.nextDouble()*.7;p.physicalRetention=.65+R.nextDouble()*.7;p.declineAge=29+R.nextInt(7);
   int quality=first?11+R.nextInt(5):6+(int)(12*Math.pow(R.nextDouble(),1.7));
-  for(int i=0;i<8;i++){p.te[i]=clamp(quality-3+R.nextInt(7));p.me[i]=clamp(quality-3+R.nextInt(7));p.ph[i]=clamp(quality-3+R.nextInt(7));}
-  shapePlayer(p);p.ca=calcCA(p);int room=p.age<=20?25+R.nextInt(65):8+R.nextInt(45);p.pa=Math.min(200,Math.max(p.ca,p.ca+room));
+  // Position template first, small individual variance second: identity stays football-realistic.
+  for(int i=0;i<8;i++){p.te[i]=clamp(quality-2+R.nextInt(5));p.me[i]=clamp(quality-2+R.nextInt(5));p.ph[i]=clamp(quality-2+R.nextInt(5));}
+  applyPositionTemplate(p,quality);shapePlayer(p);
+  p.preferredFoot=R.nextInt(100)<24?"왼발":"오른발";
+  // Most players are clearly one-footed; true two-footed players are uncommon.
+  int fr=R.nextInt(100);p.weakFoot=fr<4?18+R.nextInt(3):fr<14?15+R.nextInt(3):fr<38?11+R.nextInt(4):5+R.nextInt(6);
+  p.ca=calcCA(p);int room=p.age<=20?25+R.nextInt(65):8+R.nextInt(45);p.pa=Math.min(200,Math.max(p.ca,p.ca+room));
   p.value=Math.max(1,(p.ca*p.ca)/80+Math.max(0,p.pa-p.ca)*2);p.wage=Math.max(1,p.ca/4);p.nick=nickname(p);return p;
+ }
+ int pv(int q,int bonus){return clamp(q+bonus-1+R.nextInt(3));}
+ void setT(Player p,int q,int...b){for(int i=0;i<8;i++)p.te[i]=pv(q,b[i]);}
+ void setM(Player p,int q,int...b){for(int i=0;i<8;i++)p.me[i]=pv(q,b[i]);}
+ void setP(Player p,int q,int...b){for(int i=0;i<8;i++)p.ph[i]=pv(q,b[i]);}
+ void applyPositionTemplate(Player p,int q){
+  // te: finishing, dribbling, first touch, passing, crossing, heading, tackling, technique
+  // me: composure, decisions, vision, off-ball, positioning, concentration, work rate, teamwork
+  // ph: pace, acceleration, agility, balance, strength, jumping, stamina, natural fitness
+  if(p.pos.equals("GK")){
+   setT(p,q,-4,-4,-1,0,-3,-1,-2,-1);setM(p,q,2,2,0,-4,3,3,0,2);setP(p,q,-1,-1,0,1,2,2,0,1);
+  }else if(p.pos.equals("CB")){
+   setT(p,q,-4,-3,-1,0,-2,3,4,-1);setM(p,q,1,2,-1,-2,4,3,1,2);setP(p,q,0,0,-1,1,4,3,1,1);
+  }else if(p.pos.equals("LB")||p.pos.equals("RB")){
+   setT(p,q,-2,1,1,2,3,-2,2,1);setM(p,q,0,2,1,1,2,1,3,2);setP(p,q,3,3,2,1,0,-1,4,2);
+  }else if(p.pos.equals("DM")){
+   setT(p,q,-3,-1,1,3,-1,0,3,1);setM(p,q,1,3,2,-1,4,3,3,3);setP(p,q,0,0,0,2,2,1,3,2);
+  }else if(p.pos.equals("CM")){
+   setT(p,q,-1,1,2,4,0,-2,1,2);setM(p,q,1,4,4,1,1,2,4,3);setP(p,q,0,0,1,1,0,-2,4,2);
+  }else if(p.pos.equals("AM")){
+   setT(p,q,2,3,4,4,1,-3,-3,3);setM(p,q,2,3,4,3,-2,0,1,1);setP(p,q,1,2,3,2,-2,-3,1,0);
+  }else if(p.pos.equals("LW")||p.pos.equals("RW")){
+   setT(p,q,1,4,3,1,3,-3,-4,3);setM(p,q,1,2,2,3,-3,0,1,0);setP(p,q,4,4,4,2,-2,-3,2,1);
+  }else{ // ST
+   setT(p,q,4,2,3,0,-3,1,-5,2);setM(p,q,3,2,0,4,-4,0,0,0);setP(p,q,3,4,2,2,1,0,1,1);
+  }
  }
  int clamp(int x){return Math.max(1,Math.min(20,x));}
  void add(int[]a,int i,int n){a[i]=clamp(a[i]+n);}
@@ -162,14 +193,32 @@ public class MainActivity extends Activity {
   }else if(p.pos.equals("CM")||p.pos.equals("AM")){
    if(cat==0){double[]q={.55,1.0,1.25,1.5,.75,.3,.65,.85};v*=q[i];}
    if(cat==1){double[]q={.9,1.3,1.45,.95,.7,.9,1.0,.65};v*=q[i];}
+  }else if(p.pos.equals("LW")||p.pos.equals("RW")){
+   if(cat==0){double[]q={.9,1.45,1.15,.75,1.2,.15,.05,1.0};v*=q[i];}
+   if(cat==1){double[]q={.8,1.0,.85,1.2,.2,.65,.8,.65};v*=q[i];}
+   if(cat==2){double[]q={1.5,1.55,1.35,1.0,.55,.35,1.0,.9};v*=q[i];}
+  }else if(p.pos.equals("LB")||p.pos.equals("RB")){
+   if(cat==0){double[]q={.15,.8,.85,1.0,1.3,.25,1.1,.75};v*=q[i];}
+   if(cat==1){double[]q={.65,1.05,.7,.7,1.15,.9,1.2,1.05};v*=q[i];}
+   if(cat==2){double[]q={1.3,1.35,1.0,.9,.8,.65,1.45,1.0};v*=q[i];}
+  }else if(p.pos.equals("DM")){
+   if(cat==0){double[]q={.1,.55,.85,1.25,.4,.55,1.3,.8};v*=q[i];}
+   if(cat==1){double[]q={.8,1.3,1.05,.4,1.45,1.2,1.2,1.25};v*=q[i];}
+   if(cat==2){double[]q={.8,.8,.75,1.0,1.05,.8,1.2,1.0};v*=q[i];}
   }
   return v;
  }
  int calcCA(Player p){
   double pts=0,max=0;
   for(int c=0;c<3;c++)for(int i=0;i<8;i++){double ww=w(p,c,i);pts+=cost(c==0?p.te[i]:c==1?p.me[i]:p.ph[i])*ww;max+=cost(20)*ww;}
-  return Math.max(1,Math.min(200,(int)Math.round(200*pts/max)));
+  double attrCA=200*pts/max;
+  // Weak-foot proficiency consumes CA budget non-linearly:
+  // ordinary weak foot is cheap, 15+ is costly, 18-20 (near two-footed) is a premium trait.
+  double wf=Math.max(1,Math.min(20,p.weakFoot));
+  double footCost=wf<=8?0:Math.pow((wf-8)/12.0,1.65)*18.0;
+  return Math.max(1,Math.min(200,(int)Math.round(attrCA+footCost)));
  }
+ String footLabel(Player p){if(p.weakFoot>=18)return "거의 양발";if(p.weakFoot>=15)return "양발 활용 우수";if(p.weakFoot>=11)return "반대발 준수";if(p.weakFoot>=7)return "주발 선호";return "강한 주발 의존";}
  String nickname(Player p){
   double target=p.height*.18+p.te[5]*2+p.ph[4]*1.8+p.ph[5]*2;
   double run=p.ph[0]*2+p.ph[1]*2.2+p.me[3]*2+p.te[0];
@@ -216,6 +265,7 @@ public class MainActivity extends Activity {
  }
  void detail(Player p){
   frame(p.name+" · "+p.nick);LinearLayout info=card();info.addView(tx(p.nation+" | "+p.pos+" | "+p.age+"세 | "+p.height+"cm / "+p.weight+"kg | "+p.body+" 체형",16,Color.WHITE));info.addView(tx("CA "+p.ca+" / PA "+p.pa+"     경기 "+p.apps+" / 골 "+p.goals+"     가치 "+p.value+"억",15,GREEN));body.addView(info);
+  body.addView(tx("주발 "+p.preferredFoot+"   |   반대발 "+p.weakFoot+"/20   |   "+footLabel(p),14,Color.WHITE));
   LinearLayout cols=new LinearLayout(this);cols.setOrientation(LinearLayout.HORIZONTAL);cols.addView(attrCol("기술",TECH,p.te),new LinearLayout.LayoutParams(0,-2,1));cols.addView(attrCol("정신",MENT,p.me),new LinearLayout.LayoutParams(0,-2,1));cols.addView(attrCol("신체",PHYS,p.ph),new LinearLayout.LayoutParams(0,-2,1));body.addView(cols);
   body.addView(tx("※ 플레이 성향 내부점수와 성장속도/프로의식/노쇠 데이터는 공개되지 않습니다.",12,MUTED));
  }
@@ -258,7 +308,7 @@ public class MainActivity extends Activity {
 
   LinearLayout board=new LinearLayout(this);board.setOrientation(LinearLayout.VERTICAL);board.setPadding(dp(10),dp(8),dp(10),dp(8));board.setBackgroundColor(Color.rgb(25,83,58));
   board.addView(tx("직접 만든 포메이션",15,Color.WHITE));
-  String[][] rows={{"LW","LST","ST","RST","RW"},{"LAM","AM","RAM"},{"LCM","CM","RCM"},{"LDM","DM","RDM"},{"LB","LCB","CB","RCB","RB"},{"GK"}};
+  String[][] rows={{"LW","LR","ST","RS","RW"},{"LAM","AM","RAM"},{"LCM","CM","RCM"},{"LDM","DM","RDM"},{"LB","LCB","CB","RCB","RB"},{"GK"}};
   for(String[] row:rows){
    LinearLayout rr=new LinearLayout(this);rr.setGravity(Gravity.CENTER);
    for(String sl:row){int idx=slotIndex(sl);TextView slot=tacticSlot(idx);rr.addView(slot,new LinearLayout.LayoutParams(0,dp(62),1));}
@@ -290,7 +340,7 @@ public class MainActivity extends Activity {
       if(o instanceof Player){
        Player q=(Player)o;int from=-1;for(int i=0;i<XI.length;i++)if(XI[i]==q){from=i;break;}
        if(from>=0 && from!=idx){Player target=XI[idx];XI[idx]=q;XI[from]=target;} // tactical slot -> slot: swap
-       else if(from<0){if(XI[idx]!=null)XI[idx].starter=false;XI[idx]=q;}       // squad rail -> slot
+       else if(from<0){if(XI[idx]==null&&xiCount()>=11){Toast.makeText(this,"선발은 최대 11명입니다",Toast.LENGTH_SHORT).show();return true;}if(XI[idx]!=null)XI[idx].starter=false;XI[idx]=q;}       // squad rail -> slot
        for(Player z:squad)z.starter=false;for(Player z:XI)if(z!=null)z.starter=true;
        saveGame();tactic();
       }return true;
@@ -304,13 +354,13 @@ public class MainActivity extends Activity {
    x.startDragAndDrop(data,new View.DragShadowBuilder(x),moving,0);
    return true;
   });
-  v.setOnClickListener(x->pickSlot(idx));return v;
+  v.setOnClickListener(x->{if(XI[idx]==null)pickSlot(idx);else roleDialog(idx);});return v;
  }
  int slotIndex(String n){for(int i=0;i<SLOT.length;i++)if(SLOT[i].equals(n))return i;return 0;}
  String slotLabel(int i){Player q=XI[i];return SLOT[i]+"\n"+(q==null?"＋":q.name+"\n"+q.pos+(q.pos.equals(SLOT[i])||SLOT[i].contains(q.pos)?"":" ⚠"));}
  int xiCount(){int n=0;for(Player q:XI)if(q!=null)n++;return n;}
  void syncStarters(){for(Player z:squad)z.starter=false;for(Player z:XI)if(z!=null)z.starter=true;}
- String baseSlot(String sl){if(sl.equals("LST")||sl.equals("RST"))return "ST";if(sl.equals("LCB")||sl.equals("RCB"))return "CB";if(sl.equals("LDM")||sl.equals("RDM"))return "DM";if(sl.equals("LCM")||sl.equals("RCM"))return "CM";if(sl.equals("LAM")||sl.equals("RAM"))return "AM";return sl;}
+ String baseSlot(String sl){if(sl.equals("LR")||sl.equals("RS"))return "ST";if(sl.equals("LCB")||sl.equals("RCB"))return "CB";if(sl.equals("LDM")||sl.equals("RDM"))return "DM";if(sl.equals("LCM")||sl.equals("RCM"))return "CM";if(sl.equals("LAM")||sl.equals("RAM"))return "AM";return sl;}
  double fit(Player p,String raw){String pos=baseSlot(raw);double v=0;
   if(pos.equals("ST"))v=p.te[0]*2.2+p.me[3]*1.8+p.me[0]*1.2+p.ph[1]*1.3+p.ph[0]*1.1+p.ph[4]*.7+p.te[5]*.6;
   else if(pos.equals("LW")||pos.equals("RW"))v=p.te[1]*1.7+p.ph[1]*1.5+p.ph[0]*1.3+p.te[4]*1.1+p.te[2]*.9+p.me[3]*1.1+p.te[0]*.7;
@@ -329,7 +379,7 @@ public class MainActivity extends Activity {
   ArrayList<Player> cand=new ArrayList<>();for(Player q:squad){boolean used=false;for(Player z:XI)if(z==q)used=true;if(!used||XI[idx]==q)cand.add(q);}
   Collections.sort(cand,(x,y)->Double.compare(fit(y,SLOT[idx]),fit(x,SLOT[idx])));
   ScrollView sv=new ScrollView(this);LinearLayout list=new LinearLayout(this);list.setOrientation(LinearLayout.VERTICAL);int rank=1;
-  for(Player q:cand){Button bb=bt((rank++)+". "+q.name+"   "+q.pos+"   CA "+q.ca+"   "+fitStars(q,SLOT[idx]));bb.setGravity(Gravity.LEFT|Gravity.CENTER_VERTICAL);
+  for(Player q:cand){Button bb=bt((rank++)+". "+q.name+"   "+q.pos+"   적합 "+(int)Math.round(fit(q,SLOT[idx]))+"   "+fitStars(q,SLOT[idx])+"   CA "+q.ca);bb.setGravity(Gravity.LEFT|Gravity.CENTER_VERTICAL);
    bb.setOnClickListener(v->{int from=-1;for(int i=0;i<XI.length;i++)if(XI[i]==q){from=i;break;}if(from<0&&XI[idx]==null&&xiCount()>=11){Toast.makeText(this,"선발은 최대 11명입니다",Toast.LENGTH_SHORT).show();return;}if(from>=0&&from!=idx){Player t=XI[idx];XI[idx]=q;XI[from]=t;}else XI[idx]=q;syncStarters();saveGame();d.dismiss();tactic();});list.addView(bb);}
   sv.addView(list);box.addView(sv,new LinearLayout.LayoutParams(dp(540),dp(440)));d.setContentView(box);d.show();
  }
@@ -355,7 +405,7 @@ public class MainActivity extends Activity {
  }
  void raise(Player p,int idx){if(idx<8)p.te[idx]=clamp(p.te[idx]+1);else if(idx<16)p.me[idx-8]=clamp(p.me[idx-8]+1);else if(p.age<=20)p.ph[idx-16]=clamp(p.ph[idx-16]+1);p.ca=Math.min(p.pa,calcCA(p));}
  float[][] tacticalCoords(){
-  ArrayList<float[]> a=new ArrayList<>();String[][] map={{"GK","0.06","0.50"},{"LB","0.20","0.86"},{"LCB","0.20","0.65"},{"CB","0.19","0.50"},{"RCB","0.20","0.35"},{"RB","0.20","0.14"},{"LDM","0.34","0.66"},{"DM","0.33","0.50"},{"RDM","0.34","0.34"},{"LCM","0.45","0.66"},{"CM","0.45","0.50"},{"RCM","0.45","0.34"},{"LAM","0.57","0.66"},{"AM","0.58","0.50"},{"RAM","0.57","0.34"},{"LW","0.68","0.88"},{"LST","0.70","0.64"},{"ST","0.72","0.50"},{"RST","0.70","0.36"},{"RW","0.68","0.12"}};
+  ArrayList<float[]> a=new ArrayList<>();String[][] map={{"GK","0.06","0.50"},{"LB","0.20","0.86"},{"LCB","0.20","0.65"},{"CB","0.19","0.50"},{"RCB","0.20","0.35"},{"RB","0.20","0.14"},{"LDM","0.34","0.66"},{"DM","0.33","0.50"},{"RDM","0.34","0.34"},{"LCM","0.45","0.66"},{"CM","0.45","0.50"},{"RCM","0.45","0.34"},{"LAM","0.57","0.66"},{"AM","0.58","0.50"},{"RAM","0.57","0.34"},{"LW","0.68","0.88"},{"LR","0.70","0.64"},{"ST","0.72","0.50"},{"RS","0.70","0.36"},{"RW","0.68","0.12"}};
   for(String[] m:map){int k=slotIndex(m[0]);if(XI[k]!=null)a.add(new float[]{Float.parseFloat(m[1]),Float.parseFloat(m[2])});}
   while(a.size()<11)a.add(new float[]{.42f+(a.size()%3)*.08f,.14f+(a.size()%6)*.14f});
   float[][] out=new float[11][2];for(int i=0;i<11;i++)out[i]=a.get(i);return out;
@@ -432,6 +482,8 @@ public class MainActivity extends Activity {
   float[][] xy=new float[22][2], base=new float[22][2], dest=new float[22][2], vel=new float[22][2];
    float[] thinkOffset=new float[22], runBias=new float[22], laneBias=new float[22], aggression=new float[22];
    float[] stridePhase=new float[22],headingX=new float[22],headingY=new float[22];
+   float[][] stepTarget=new float[22][2];int[] stepHold=new int[22],turnHold=new int[22];
+   float[][] prevXY=new float[22][2];float[] visualStep=new float[22];
    int[] roleState=new int[22]; int animFrame=0;
   float bx=.5f,by=.5f,btx=.5f,bty=.5f; int owner=0,receiver=-1,state=0,ticks=0,dribbleDef=-1,dribblePhase=0;
   // states: 0 possession, 1 pass, 2 through ball, 3 cross, 4 shot, 5 save/reset, 6 goal celebration, 7 one-v-one dribble
@@ -446,12 +498,31 @@ public class MainActivity extends Activity {
    for(int i=0;i<22;i++){xy[i][0]=dest[i][0]=base[i][0];xy[i][1]=dest[i][1]=base[i][1];}
    for(int i=0;i<22;i++){thinkOffset[i]=r.nextFloat()*60f;runBias[i]=.78f+r.nextFloat()*.48f;laneBias[i]=(r.nextFloat()-.5f)*.12f;aggression[i]=.72f+r.nextFloat()*.55f;}
    for(int i=0;i<22;i++){stridePhase[i]=r.nextFloat()*6.28f;headingX[i]=1f;}
+   for(int i=0;i<22;i++){stepTarget[i][0]=xy[i][0];stepTarget[i][1]=xy[i][1];stepHold[i]=r.nextInt(3);turnHold[i]=0;}
+   for(int i=0;i<22;i++){prevXY[i][0]=xy[i][0];prevXY[i][1]=xy[i][1];visualStep[i]=r.nextFloat()*6.28f;}
    owner=0;bx=xy[0][0];by=xy[0][1];h.post(anim);
   }
   Runnable anim=new Runnable(){public void run(){
    animFrame++;
+   for(int i=0;i<22;i++){prevXY[i][0]=xy[i][0];prevXY[i][1]=xy[i][1];}
    for(int i=0;i<22;i++){float dx=dest[i][0]-xy[i][0],dy=dest[i][1]-xy[i][1];float accN=norm(A(i,"acc")),paceN=norm(A(i,"pace")),agiN=norm(A(i,"agi")),dl=(float)Math.sqrt(dx*dx+dy*dy);
-    if(dl>.0025f){float nx=dx/dl,ny=dy/dl,dot=headingX[i]*nx+headingY[i]*ny;boolean turn=dot<.35f;int cadence=Math.max(1,turn?4-(int)(agiN*2):(roleState[i]==1||roleState[i]==2||roleState[i]==4?2:3));if((animFrame+i*2)%cadence==0){float stride=(roleState[i]==1||roleState[i]==2||roleState[i]==4?(.0062f+.0048f*paceN):(.0038f+.0028f*paceN))*(.82f+.28f*accN);if(turn)stride*=.48f+.35f*agiN;float step=Math.min(dl,stride);xy[i][0]+=nx*step;xy[i][1]+=ny*step;headingX[i]=nx;headingY[i]=ny;}}
+    if(stepHold[i]>0){stepHold[i]--;}else if(turnHold[i]>0){turnHold[i]--;}
+    else if(dl>.003f){
+     float nx=dx/dl,ny=dy/dl,dot=headingX[i]*nx+headingY[i]*ny;
+     if(dot<.20f){turnHold[i]=Math.max(1,3-(int)(agiN*2));headingX[i]=headingX[i]*.45f+nx*.55f;headingY[i]=headingY[i]*.45f+ny*.55f;}
+     else{
+      boolean sprint=roleState[i]==1||roleState[i]==2||roleState[i]==4;
+      float stride=(sprint?(.0048f+.0036f*paceN):(.0027f+.0019f*paceN))*(.82f+.24f*accN);
+      // Natural lateral variation prevents every marker tracing ruler-straight rails.
+      float lateral=((i%2==0)?1f:-1f)*(sprint?.00055f:.00032f)*(1f-.45f*agiN);
+      float sx=nx*stride-ny*lateral,sy=ny*stride+nx*lateral;
+      stepTarget[i][0]=clip(xy[i][0]+sx);stepTarget[i][1]=clip(xy[i][1]+sy);
+      // Hard footfall: move to the next planted position in one short step, then visibly hold.
+      xy[i][0]=stepTarget[i][0];xy[i][1]=stepTarget[i][1];
+      headingX[i]=nx;headingY[i]=ny;visualStep[i]+=(sprint?1.15f:.82f);
+      stepHold[i]=sprint?3:5;
+     }
+    }
     vel[i][0]=0;vel[i][1]=0;separateKeeper(i);}
    if(ballFlying){
     // Normal passes track the receiver continuously. Through balls/crosses deliberately target space.
@@ -459,10 +530,13 @@ public class MainActivity extends Activity {
     float dx=btx-bx,dy=bty-by,dist=(float)Math.sqrt(dx*dx+dy*dy);float sp=state==4?.036f:state==3?.024f:state==2?.021f:.017f;
     if(dist>sp){bx+=dx/dist*sp;by+=dy/dist*sp;}else{bx=btx;by=bty;}
    }
-   else {float lead=(state==7?.016f:.010f);float footX=xy[owner][0]+(owner<11?lead:-lead),footY=xy[owner][1]+.008f;float follow=state==7?.48f:.34f;bx+=(footX-bx)*follow;by+=(footY-by)*follow;}
+   else {float lead=(state==7?.018f:.011f),hx=headingX[owner],hy=headingY[owner];float footX=xy[owner][0]+hx*lead,footY=xy[owner][1]+hy*lead;float follow=state==7?.62f:.48f;bx+=(footX-bx)*follow;by+=(footY-by)*follow;}
    if(state==0 && h.getLooper()!=null && animFrame%3==0) updateIndependentMovement();
    invalidate();h.postDelayed(this,16);
   }};
+  void playerSpacing(){
+   for(int i=0;i<22;i++)for(int j=i+1;j<22;j++){float dx=xy[i][0]-xy[j][0],dy=xy[i][1]-xy[j][1],d=(float)Math.sqrt(dx*dx+dy*dy);if(d>.0005f&&d<.022f){float push=(.022f-d)*.18f,nx=dx/d,ny=dy/d;xy[i][0]=clip(xy[i][0]+nx*push);xy[i][1]=clip(xy[i][1]+ny*push);xy[j][0]=clip(xy[j][0]-nx*push);xy[j][1]=clip(xy[j][1]-ny*push);}}
+  }
   boolean inGoalMouth(int i){boolean b=i<11;return (b?xy[i][0]>.925f:xy[i][0]<.075f)&&xy[i][1]>.39f&&xy[i][1]<.61f;}
   boolean inBox(int i){boolean b=i<11;return (b?xy[i][0]>.80f:xy[i][0]<.20f)&&xy[i][1]>.25f&&xy[i][1]<.75f;}
   void separateKeeper(int i){if(i%11==0)return;boolean b=i<11;int g=b?11:0;float dx=xy[i][0]-xy[g][0],dy=xy[i][1]-xy[g][1],d=(float)Math.sqrt(dx*dx+dy*dy);if(d<.035f){float nx=d>.001f?dx/d:(b?-1f:1f),ny=d>.001f?dy/d:0f;xy[i][0]=clip(xy[g][0]+nx*.037f);xy[i][1]=clip(xy[g][1]+ny*.037f);}}
@@ -611,6 +685,8 @@ public class MainActivity extends Activity {
   float dribbleRole(int i){String r=R(i),n=I(i);return (r.contains("인사이드")||r.contains("윙어")||r.contains("만능")?.10f:0f)+(n.equals("드리블 적극적")?.18f:0f);}
   float shootRole(int i){String r=R(i),n=I(i);return (r.contains("스트라이커")||r.equals("세컨드 스트라이커")?.10f:0f)+(n.equals("슈팅 적극적")?.18f:0f);}
   void updateIndependentMovement(){
+   // Players commit to a short movement idea instead of changing destination every render frame.
+   if(animFrame%9!=0)return;
    boolean blue=owner<11;float dir=blue?1f:-1f;float ballX=ballFlying?bx:xy[owner][0],ballY=ballFlying?by:xy[owner][1];
    int attackBase=blue?0:11, defendBase=blue?11:0;
    for(int j=0;j<22;j++){
@@ -704,7 +780,23 @@ public class MainActivity extends Activity {
    // visible goals/net
    p.setColor(Color.LTGRAY);c.drawRect(l-dpv(10),t+fh*.43f,l,t+fh*.57f,p);c.drawRect(rr,t+fh*.43f,rr+dpv(10),t+fh*.57f,p);
    p.setStyle(Paint.Style.FILL);
-   for(int i=0;i<22;i++){float px=l+xy[i][0]*fw,py=t+xy[i][1]*fh;p.setColor(Color.argb(70,0,0,0));c.drawCircle(px+2,py+3,dpv(10),p);p.setColor(i<11?Color.rgb(40,130,255):Color.rgb(235,64,64));c.drawCircle(px,py,dpv(9),p);p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(2);p.setColor(Color.WHITE);c.drawCircle(px,py,dpv(9),p);p.setStyle(Paint.Style.FILL);p.setColor(Color.WHITE);p.setTextSize(dpv(9));c.drawText(""+(i%11+1),px-dpv(3),py+dpv(3),p);}
+   for(int i=0;i<22;i++){
+    float px=l+xy[i][0]*fw,py=t+xy[i][1]*fh;
+    float hx=headingX[i],hy=headingY[i],hl=(float)Math.sqrt(hx*hx+hy*hy);if(hl<.01f){hx=1;hy=0;hl=1;}hx/=hl;hy/=hl;
+    float sideX=-hy,sideY=hx,bob=(float)Math.sin(visualStep[i])*dpv(1.2f);
+    // shadow stays planted, body faces travel direction
+    p.setStyle(Paint.Style.FILL);p.setColor(Color.argb(65,0,0,0));c.drawOval(px-dpv(7),py+dpv(7),px+dpv(7),py+dpv(11),p);
+    p.setColor(i<11?Color.rgb(40,130,255):Color.rgb(235,64,64));
+    c.drawCircle(px,py+bob,dpv(7.2f),p);
+    // shoulders/direction nose
+    p.setStrokeWidth(dpv(2.2f));p.setColor(Color.WHITE);c.drawLine(px-hx*dpv(4),py-hy*dpv(4)+bob,px+hx*dpv(7),py+hy*dpv(7)+bob,p);
+    // alternating feet make motion readable even in 2D
+    float swing=(float)Math.sin(visualStep[i])*dpv(4.2f);
+    p.setStrokeWidth(dpv(2.5f));p.setColor(Color.rgb(225,225,225));
+    c.drawLine(px+sideX*dpv(3),py+sideY*dpv(3)+bob,px+sideX*dpv(3)+hx*swing,py+sideY*dpv(3)+hy*swing+dpv(7),p);
+    c.drawLine(px-sideX*dpv(3),py-sideY*dpv(3)+bob,px-sideX*dpv(3)-hx*swing,py-sideY*dpv(3)-hy*swing+dpv(7),p);
+    p.setColor(Color.WHITE);p.setTextSize(dpv(8));c.drawText(""+(i%11+1),px-dpv(2.5f),py+dpv(2.5f)+bob,p);
+   }
    // football: white body + black panels, not a plain dot
    float px=l+bx*fw,py=t+by*fh;p.setColor(Color.WHITE);c.drawCircle(px,py,dpv(6),p);p.setColor(Color.BLACK);c.drawCircle(px,py,dpv(2.2f),p);for(int k=0;k<5;k++){double a=k*Math.PI*2/5;c.drawCircle(px+(float)Math.cos(a)*dpv(3.7f),py+(float)Math.sin(a)*dpv(3.7f),dpv(1.1f),p);}
    if(eventText.contains("슈팅")||eventText.contains("GOAL")){p.setTextSize(dpv(18));p.setColor(Color.WHITE);p.setFakeBoldText(true);c.drawText(eventText,l+fw*.43f,t+dpv(28),p);p.setFakeBoldText(false);}
