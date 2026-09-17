@@ -103,7 +103,11 @@ public class MainActivity extends Activity {
    Toast.makeText(this,"세이브 파일을 불러오지 못했습니다.",Toast.LENGTH_LONG).show();startMenu();
   }
  }
- void onStop(){super.onStop();if(!squad.isEmpty())saveGame();}
+ @Override
+protected void onStop(){
+    super.onStop();
+    if(!squad.isEmpty()) saveGame();
+}
  void seed(){
   String[] ns={"DUMOK FC","JEONJU UNITED","SEOUL CITY","BUSAN ATHLETIC","INCHEON BLUE","DAEGU REDS","SUWON KNIGHTS","DAEJEON PHOENIX"};
   for(String n:ns)teams.add(new Team(n));
