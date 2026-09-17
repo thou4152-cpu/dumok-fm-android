@@ -197,10 +197,69 @@ public class MainActivity extends Activity {
  void result(Team h,Team a,int x,int y){h.p++;a.p++;h.gf+=x;h.ga+=y;a.gf+=y;a.ga+=x;if(x>y){h.w++;a.l++;h.pts+=3;}else if(x<y){a.w++;h.l++;a.pts+=3;}else{h.d++;a.d++;h.pts++;a.pts++;}}
 
  static class SmoothPitch extends View{
-  Paint p=new Paint(1);Random r=new Random();float[][]xy=new float[20][2],to=new float[20][2];float bx=.5f,by=.5f,btx=.5f,bty=.5f;Handler h=new Handler(Looper.getMainLooper());
-  SmoothPitch(Context c){super(c);for(int i=0;i<20;i++){xy[i][0]=to[i][0]=.08f+r.nextFloat()*.84f;xy[i][1]=to[i][1]=.08f+r.nextFloat()*.84f;}h.post(anim);}
-  Runnable anim=new Runnable(){public void run(){for(int i=0;i<20;i++){xy[i][0]+=(to[i][0]-xy[i][0])*.08f;xy[i][1]+=(to[i][1]-xy[i][1])*.08f;}bx+=(btx-bx)*.13f;by+=(bty-by)*.13f;invalidate();h.postDelayed(this,16);}};
-  void newPlay(){for(int i=0;i<20;i++){float base=i<10?.18f:.82f;to[i][0]=Math.max(.05f,Math.min(.95f,base+(r.nextFloat()-.5f)*.65f));to[i][1]=.07f+r.nextFloat()*.86f;}int carrier=r.nextInt(20);btx=to[carrier][0];bty=to[carrier][1];}
-  protected void onDraw(Canvas c){float w=getWidth(),h=getHeight();c.drawColor(Color.rgb(32,116,67));p.setColor(Color.argb(35,255,255,255));p.setStyle(Paint.Style.FILL);for(int i=0;i<8;i+=2)c.drawRect(i*w/8,0,(i+1)*w/8,h,p);p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(3);p.setColor(Color.WHITE);c.drawRect(10,10,w-10,h-10,p);c.drawLine(w/2,10,w/2,h-10,p);c.drawCircle(w/2,h/2,Math.min(w,h)*.12f,p);c.drawRect(10,h*.28f,w*.16f,h*.72f,p);c.drawRect(w*.84f,h*.28f,w-10,h*.72f,p);p.setStyle(Paint.Style.FILL);for(int i=0;i<20;i++){p.setColor(i<10?Color.rgb(65,145,255):Color.rgb(245,75,75));c.drawCircle(xy[i][0]*w,xy[i][1]*h,9,p);p.setColor(Color.WHITE);p.setTextSize(12);c.drawText(""+(i%10+1),xy[i][0]*w-4,xy[i][1]*h+4,p);}p.setColor(Color.WHITE);c.drawCircle(bx*w,by*h,6,p);}
+  Paint p=new Paint(1); Random r=new Random();
+  // 0-9 blue: GK,RB,RCB,LCB,LB,DM,CM,RW,AM,LW/ST hybrid; 10-19 red mirror
+  float[][] xy=new float[20][2], home=new float[20][2], target=new float[20][2];
+  int owner=0, phase=0, receiver=-1; float bx,by,btx,bty; boolean ballFlying=false;
+  Handler h=new Handler(Looper.getMainLooper());
+  SmoothPitch(Context c){
+   super(c);
+   float[][] shape={{.07f,.50f},{.22f,.18f},{.20f,.38f},{.20f,.62f},{.22f,.82f},{.35f,.43f},{.43f,.58f},{.57f,.15f},{.60f,.50f},{.68f,.78f}};
+   for(int i=0;i<10;i++){home[i][0]=shape[i][0];home[i][1]=shape[i][1];home[i+10][0]=1-shape[i][0];home[i+10][1]=1-shape[i][1];}
+   for(int i=0;i<20;i++){xy[i][0]=target[i][0]=home[i][0];xy[i][1]=target[i][1]=home[i][1];}
+   owner=0; bx=xy[owner][0];by=xy[owner][1]; h.post(anim);
+  }
+  Runnable anim=new Runnable(){public void run(){
+   for(int i=0;i<20;i++){xy[i][0]+=(target[i][0]-xy[i][0])*.055f;xy[i][1]+=(target[i][1]-xy[i][1])*.055f;}
+   if(ballFlying){bx+=(btx-bx)*.16f;by+=(bty-by)*.16f;if(Math.abs(bx-btx)<.012&&Math.abs(by-bty)<.012){owner=receiver;receiver=-1;ballFlying=false;}}
+   else {bx+=(xy[owner][0]-bx)*.30f;by+=(xy[owner][1]-by)*.30f;}
+   invalidate();h.postDelayed(this,16);
+  }};
+  void newPlay(){
+   // Every match tick advances a coherent possession phase rather than teleporting 20 random dots.
+   phase++;
+   int team=owner<10?0:1, base=team*10;
+   if(phase%7==0 && r.nextFloat()<.28f){ // turnover: nearest-ish opponent wins it
+    int k=base==0?10:0; owner=k+1+r.nextInt(8); ballFlying=false; shapeAroundBall(); return;
+   }
+   int local=owner-base;
+   int nextLocal;
+   if(local==0) nextLocal=2+r.nextInt(3);             // GK -> CB/FB
+   else if(local<=4) nextLocal=r.nextBoolean()?5:6;   // back line -> midfield
+   else if(local<=6) nextLocal=7+r.nextInt(3);        // midfield -> attacking line
+   else { // final third: recycle, combine, or drive toward goal
+    if(r.nextFloat()<.42f){target[owner][0]=team==0?.88f:.12f;target[owner][1]=.35f+r.nextFloat()*.30f;shapeAroundBall();return;}
+    nextLocal=7+r.nextInt(3);
+   }
+   if(nextLocal==local)nextLocal=6;
+   receiver=base+nextLocal;btx=xy[receiver][0];bty=xy[receiver][1];ballFlying=true;shapeAroundBall();
+  }
+  void shapeAroundBall(){
+   boolean blue=owner<10;float ballX=bx;
+   for(int i=0;i<20;i++){
+    boolean same=(i<10)==blue;
+    float hx=home[i][0],hy=home[i][1];
+    float shift=(ballX-.5f)*(same?.34f:.24f);
+    // Team in possession expands; defending team compresses around ball.
+    target[i][0]=clip(hx+shift);
+    if(same) target[i][1]=clip(hy+(hy-.5f)*.08f);
+    else target[i][1]=clip(hy+(by-hy)*.20f);
+   }
+   // Ball carrier and nearby support preserve local triangles.
+   target[owner][0]=clip(bx+(blue?.045f:-.045f));target[owner][1]=clip(by);
+   int b=blue?0:10;
+   target[b+5][1]=clip(by-.12f);target[b+6][1]=clip(by+.12f);
+  }
+  float clip(float v){return Math.max(.045f,Math.min(.955f,v));}
+  protected void onDraw(Canvas c){
+   float w=getWidth(),h=getHeight();c.drawColor(Color.rgb(32,116,67));
+   p.setStyle(Paint.Style.FILL);p.setColor(Color.argb(28,255,255,255));for(int i=0;i<10;i+=2)c.drawRect(i*w/10,0,(i+1)*w/10,h,p);
+   p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(3);p.setColor(Color.WHITE);c.drawRect(10,10,w-10,h-10,p);c.drawLine(w/2,10,w/2,h-10,p);c.drawCircle(w/2,h/2,Math.min(w,h)*.12f,p);
+   c.drawRect(10,h*.27f,w*.16f,h*.73f,p);c.drawRect(w*.84f,h*.27f,w-10,h*.73f,p);
+   c.drawRect(10,h*.38f,w*.07f,h*.62f,p);c.drawRect(w*.93f,h*.38f,w-10,h*.62f,p);
+   p.setStyle(Paint.Style.FILL);
+   for(int i=0;i<20;i++){p.setColor(i<10?Color.rgb(65,145,255):Color.rgb(245,75,75));c.drawCircle(xy[i][0]*w,xy[i][1]*h,10,p);p.setColor(Color.WHITE);p.setTextSize(11);c.drawText(""+(i%10+1),xy[i][0]*w-4,xy[i][1]*h+4,p);}
+   p.setColor(Color.WHITE);c.drawCircle(bx*w,by*h,5,p);
+  }
  }
 }
