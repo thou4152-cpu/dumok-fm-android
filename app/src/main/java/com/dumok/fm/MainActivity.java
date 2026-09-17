@@ -104,8 +104,10 @@ public class MainActivity extends Activity {
   }
  }
  @Override
- protected @Override
- protected void onStop(){super.onStop();if(!squad.isEmpty())saveGame();}
+protected void onStop() {
+    super.onStop();
+    if (!squad.isEmpty()) saveGame();
+}
  void seed(){
   String[] ns={"DUMOK FC","JEONJU UNITED","SEOUL CITY","BUSAN ATHLETIC","INCHEON BLUE","DAEGU REDS","SUWON KNIGHTS","DAEJEON PHOENIX"};
   for(String n:ns)teams.add(new Team(n));
