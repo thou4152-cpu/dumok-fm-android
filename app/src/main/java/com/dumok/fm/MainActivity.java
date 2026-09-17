@@ -271,6 +271,18 @@ public class MainActivity extends Activity {
  }
  LinearLayout attrCol(String title,String[] names,int[] a){LinearLayout c=card();c.addView(tx(title,16,GREEN));for(int i=0;i<a.length;i++)c.addView(tx(names[i]+"   "+a[i],13,col(a[i])));return c;}
  int col(int x){if(x>=18)return GREEN;if(x>=15)return Color.rgb(170,235,120);if(x>=11)return Color.rgb(245,210,90);if(x>=6)return Color.WHITE;return MUTED;}
+ String roleCode(String r){
+  if(r==null)return "";
+  if(r.equals("타겟맨"))return "TM";if(r.equals("연계형 공격수"))return "DLF";if(r.equals("침투형 공격수"))return "AF";
+  if(r.equals("내려오는 공격수"))return "F9";if(r.equals("만능형"))return "CF";if(r.equals("인사이드 포워드"))return "IF";
+  if(r.equals("윙어"))return "W";if(r.equals("침투형 윙어"))return "IW";if(r.equals("와이드 플레이메이커"))return "WP";
+  if(r.equals("플레이메이커"))return "AP";if(r.equals("세컨드 스트라이커"))return "SS";if(r.equals("공격형 미드필더"))return "AM";
+  if(r.equals("박스투박스"))return "BBM";if(r.equals("전진형 미드필더"))return "CM-A";if(r.equals("중앙 미드필더"))return "CM";
+  if(r.equals("수비형 미드필더"))return "DM";if(r.equals("딥라잉 플레이메이커"))return "DLP";if(r.equals("볼위닝 미드필더"))return "BWM";
+  if(r.equals("풀백"))return "FB";if(r.equals("공격형 풀백"))return "WB";if(r.equals("수비형 풀백"))return "FB-D";
+  if(r.equals("센터백"))return "CD";if(r.equals("스토퍼"))return "STP";if(r.equals("커버"))return "COV";if(r.equals("빌드업 센터백"))return "BPD";
+  if(r.equals("골키퍼"))return "GK";if(r.equals("스위퍼 키퍼"))return "SK";return r;
+ }
  String defaultRole(String sl){String p=baseSlot(sl);if(p.equals("ST"))return "침투형 공격수";if(p.equals("LW")||p.equals("RW"))return "인사이드 포워드";if(p.equals("AM"))return "플레이메이커";if(p.equals("CM"))return "박스투박스";if(p.equals("DM"))return "수비형 미드필더";if(p.equals("LB")||p.equals("RB"))return "풀백";if(p.equals("CB"))return "센터백";return "골키퍼";}
  String roleAt(int i){if(XIROLE[i]==null)XIROLE[i]=defaultRole(SLOT[i]);return XIROLE[i];}
  String instAt(int i){if(XIINST[i]==null)XIINST[i]="균형";return XIINST[i];}
@@ -484,6 +496,7 @@ public class MainActivity extends Activity {
    float[] stridePhase=new float[22],headingX=new float[22],headingY=new float[22];
    float[][] stepTarget=new float[22][2];int[] stepHold=new int[22],turnHold=new int[22];
    float[][] prevXY=new float[22][2];float[] visualStep=new float[22];
+   float[][] renderXY=new float[22][2];float[] renderHeadingX=new float[22],renderHeadingY=new float[22],moveBlend=new float[22];
    int[] roleState=new int[22]; int animFrame=0;
   float bx=.5f,by=.5f,btx=.5f,bty=.5f; int owner=0,receiver=-1,state=0,ticks=0,dribbleDef=-1,dribblePhase=0;
   // states: 0 possession, 1 pass, 2 through ball, 3 cross, 4 shot, 5 save/reset, 6 goal celebration, 7 one-v-one dribble
@@ -500,6 +513,7 @@ public class MainActivity extends Activity {
    for(int i=0;i<22;i++){stridePhase[i]=r.nextFloat()*6.28f;headingX[i]=1f;}
    for(int i=0;i<22;i++){stepTarget[i][0]=xy[i][0];stepTarget[i][1]=xy[i][1];stepHold[i]=r.nextInt(3);turnHold[i]=0;}
    for(int i=0;i<22;i++){prevXY[i][0]=xy[i][0];prevXY[i][1]=xy[i][1];visualStep[i]=r.nextFloat()*6.28f;}
+   for(int i=0;i<22;i++){renderXY[i][0]=xy[i][0];renderXY[i][1]=xy[i][1];renderHeadingX[i]=1f;moveBlend[i]=0f;}
    owner=0;bx=xy[0][0];by=xy[0][1];h.post(anim);
   }
   Runnable anim=new Runnable(){public void run(){
@@ -520,7 +534,7 @@ public class MainActivity extends Activity {
       // Hard footfall: move to the next planted position in one short step, then visibly hold.
       xy[i][0]=stepTarget[i][0];xy[i][1]=stepTarget[i][1];
       headingX[i]=nx;headingY[i]=ny;visualStep[i]+=(sprint?1.15f:.82f);
-      stepHold[i]=sprint?3:5;
+      stepHold[i]=sprint?2:3;
      }
     }
     vel[i][0]=0;vel[i][1]=0;separateKeeper(i);}
@@ -530,7 +544,7 @@ public class MainActivity extends Activity {
     float dx=btx-bx,dy=bty-by,dist=(float)Math.sqrt(dx*dx+dy*dy);float sp=state==4?.036f:state==3?.024f:state==2?.021f:.017f;
     if(dist>sp){bx+=dx/dist*sp;by+=dy/dist*sp;}else{bx=btx;by=bty;}
    }
-   else {float lead=(state==7?.018f:.011f),hx=headingX[owner],hy=headingY[owner];float footX=xy[owner][0]+hx*lead,footY=xy[owner][1]+hy*lead;float follow=state==7?.62f:.48f;bx+=(footX-bx)*follow;by+=(footY-by)*follow;}
+   else {float lead=(state==7?.018f:.011f),hx=renderHeadingX[owner],hy=renderHeadingY[owner];float footX=renderXY[owner][0]+hx*lead,footY=renderXY[owner][1]+hy*lead;float follow=state==7?.46f:.34f;bx+=(footX-bx)*follow;by+=(footY-by)*follow;}
    if(state==0 && h.getLooper()!=null && animFrame%3==0) updateIndependentMovement();
    invalidate();h.postDelayed(this,16);
   }};
@@ -542,11 +556,11 @@ public class MainActivity extends Activity {
   void separateKeeper(int i){if(i%11==0)return;boolean b=i<11;int g=b?11:0;float dx=xy[i][0]-xy[g][0],dy=xy[i][1]-xy[g][1],d=(float)Math.sqrt(dx*dx+dy*dy);if(d<.035f){float nx=d>.001f?dx/d:(b?-1f:1f),ny=d>.001f?dy/d:0f;xy[i][0]=clip(xy[g][0]+nx*.037f);xy[i][1]=clip(xy[g][1]+ny*.037f);}}
   int nearestToBall(){int best=0;float bd=99;for(int i=0;i<22;i++){float dx=xy[i][0]-bx,dy=xy[i][1]-by,d=dx*dx+dy*dy;if(d<bd){bd=d;best=i;}}return best;}
   void rescueDeadBall(){
-   if(owner>=0)return;float speed=(float)Math.sqrt(bvx*bvx+bvy*bvy);
-   if(speed<.00035f){int n=nearestToBall();float dx=bx-xy[n][0],dy=by-xy[n][1],d=(float)Math.sqrt(dx*dx+dy*dy);
-    if(d<.035f){owner=n;state=1;bx=xy[n][0]+headingX[n]*.011f;by=xy[n][1]+headingY[n]*.011f;}
-    else{dest[n][0]=bx;dest[n][1]=by;bvx*=.96f;bvy*=.96f;}
-   }
+   if(owner>=0)return;
+   int n=nearestToBall();float dx=bx-xy[n][0],dy=by-xy[n][1],d=(float)Math.sqrt(dx*dx+dy*dy);
+   // A loose ball may be stationary, but it must never be ignored.
+   if(d<.035f){owner=n;state=1;bx=xy[n][0]+headingX[n]*.011f;by=xy[n][1]+headingY[n]*.011f;}
+   else{dest[n][0]=bx;dest[n][1]=by;}
   }
   void step(){
    ticks++; lastPossessionBlue=owner<11;
@@ -694,7 +708,7 @@ public class MainActivity extends Activity {
   float shootRole(int i){String r=R(i),n=I(i);return (r.contains("스트라이커")||r.equals("세컨드 스트라이커")?.10f:0f)+(n.equals("슈팅 적극적")?.18f:0f);}
   void updateIndependentMovement(){
    // Players commit to a short movement idea instead of changing destination every render frame.
-   if(animFrame%9!=0)return;
+   if(animFrame%7!=0)return;
    boolean blue=owner<11;float dir=blue?1f:-1f;float ballX=ballFlying?bx:xy[owner][0],ballY=ballFlying?by:xy[owner][1];
    int attackBase=blue?0:11, defendBase=blue?11:0;
    for(int j=0;j<22;j++){
@@ -777,7 +791,17 @@ public class MainActivity extends Activity {
   boolean finalThird(boolean blue,float x){return blue?x>.66f:x<.34f;}
   void shape(){updateIndependentMovement();}
   float clip(float v){return Math.max(.035f,Math.min(.965f,v));}
-  protected void onDraw(Canvas c){
+  void updateRenderPose(){
+   for(int i=0;i<22;i++){
+    float dx=xy[i][0]-renderXY[i][0],dy=xy[i][1]-renderXY[i][1],d=(float)Math.sqrt(dx*dx+dy*dy),target=d>.00045f?1f:0f;
+    moveBlend[i]+=(target-moveBlend[i])*(target>moveBlend[i]?.24f:.13f);
+    float follow=.20f+.22f*moveBlend[i];renderXY[i][0]+=dx*follow;renderXY[i][1]+=dy*follow;
+    float hx=headingX[i],hy=headingY[i],hl=(float)Math.sqrt(hx*hx+hy*hy);if(hl<.01f){hx=1;hy=0;hl=1;}hx/=hl;hy/=hl;
+    renderHeadingX[i]+=(hx-renderHeadingX[i])*(.14f+.18f*moveBlend[i]);renderHeadingY[i]+=(hy-renderHeadingY[i])*(.14f+.18f*moveBlend[i]);
+    visualStep[i]+=(.08f+.30f*moveBlend[i])*(.82f+.18f*norm(A(i,"pace")));
+   }
+  }
+  protected void onDraw(Canvas c){updateRenderPose();
    float w=getWidth(),h=getHeight();c.drawColor(Color.rgb(12,20,27));
    float l=dpv(18),t=dpv(14),rr=w-dpv(18),bb=h-dpv(14),fw=rr-l,fh=bb-t;
    p.setStyle(Paint.Style.FILL);p.setColor(Color.rgb(34,126,72));c.drawRect(l,t,rr,bb,p);
@@ -789,7 +813,7 @@ public class MainActivity extends Activity {
    p.setColor(Color.LTGRAY);c.drawRect(l-dpv(10),t+fh*.43f,l,t+fh*.57f,p);c.drawRect(rr,t+fh*.43f,rr+dpv(10),t+fh*.57f,p);
    p.setStyle(Paint.Style.FILL);
    for(int i=0;i<22;i++){
-    float px=l+xy[i][0]*fw,py=t+xy[i][1]*fh,hx=headingX[i],hy=headingY[i],hl=(float)Math.sqrt(hx*hx+hy*hy);if(hl<.01f){hx=1;hy=0;hl=1;}hx/=hl;hy/=hl;
+    float px=l+renderXY[i][0]*fw,py=t+renderXY[i][1]*fh,hx=renderHeadingX[i],hy=renderHeadingY[i],hl=(float)Math.sqrt(hx*hx+hy*hy);if(hl<.01f){hx=1;hy=0;hl=1;}hx/=hl;hy/=hl;
     float sx=-hy,sy=hx,phase=(float)Math.sin(visualStep[i]),bob=Math.abs(phase)*dpv(.8f);
     p.setStyle(Paint.Style.FILL);p.setColor(Color.argb(70,0,0,0));c.drawOval(px-dpv(6),py+dpv(9),px+dpv(6),py+dpv(12),p);
     // short SD torso
