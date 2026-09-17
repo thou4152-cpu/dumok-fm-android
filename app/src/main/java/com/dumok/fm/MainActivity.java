@@ -357,7 +357,7 @@ public class MainActivity extends Activity {
   v.setOnClickListener(x->{if(XI[idx]==null)pickSlot(idx);else roleDialog(idx);});return v;
  }
  int slotIndex(String n){for(int i=0;i<SLOT.length;i++)if(SLOT[i].equals(n))return i;return 0;}
- String slotLabel(int i){Player q=XI[i];return SLOT[i]+"\n"+(q==null?"＋":q.name+"\n"+q.pos+(q.pos.equals(SLOT[i])||SLOT[i].contains(q.pos)?"":" ⚠"));}
+ String slotLabel(int i){Player q=XI[i];return SLOT[i]+"\n"+(q==null?"＋":q.name+" ["+roleCode(roleAt(i))+"]\n"+q.pos+(q.pos.equals(baseSlot(SLOT[i]))||baseSlot(SLOT[i]).equals(q.pos)?"":" ⚠"));}
  int xiCount(){int n=0;for(Player q:XI)if(q!=null)n++;return n;}
  void syncStarters(){for(Player z:squad)z.starter=false;for(Player z:XI)if(z!=null)z.starter=true;}
  String baseSlot(String sl){if(sl.equals("LR")||sl.equals("RS"))return "ST";if(sl.equals("LCB")||sl.equals("RCB"))return "CB";if(sl.equals("LDM")||sl.equals("RDM"))return "DM";if(sl.equals("LCM")||sl.equals("RCM"))return "CM";if(sl.equals("LAM")||sl.equals("RAM"))return "AM";return sl;}
@@ -540,6 +540,14 @@ public class MainActivity extends Activity {
   boolean inGoalMouth(int i){boolean b=i<11;return (b?xy[i][0]>.925f:xy[i][0]<.075f)&&xy[i][1]>.39f&&xy[i][1]<.61f;}
   boolean inBox(int i){boolean b=i<11;return (b?xy[i][0]>.80f:xy[i][0]<.20f)&&xy[i][1]>.25f&&xy[i][1]<.75f;}
   void separateKeeper(int i){if(i%11==0)return;boolean b=i<11;int g=b?11:0;float dx=xy[i][0]-xy[g][0],dy=xy[i][1]-xy[g][1],d=(float)Math.sqrt(dx*dx+dy*dy);if(d<.035f){float nx=d>.001f?dx/d:(b?-1f:1f),ny=d>.001f?dy/d:0f;xy[i][0]=clip(xy[g][0]+nx*.037f);xy[i][1]=clip(xy[g][1]+ny*.037f);}}
+  int nearestToBall(){int best=0;float bd=99;for(int i=0;i<22;i++){float dx=xy[i][0]-bx,dy=xy[i][1]-by,d=dx*dx+dy*dy;if(d<bd){bd=d;best=i;}}return best;}
+  void rescueDeadBall(){
+   if(owner>=0)return;float speed=(float)Math.sqrt(bvx*bvx+bvy*bvy);
+   if(speed<.00035f){int n=nearestToBall();float dx=bx-xy[n][0],dy=by-xy[n][1],d=(float)Math.sqrt(dx*dx+dy*dy);
+    if(d<.035f){owner=n;state=1;bx=xy[n][0]+headingX[n]*.011f;by=xy[n][1]+headingY[n]*.011f;}
+    else{dest[n][0]=bx;dest[n][1]=by;bvx*=.96f;bvy*=.96f;}
+   }
+  }
   void step(){
    ticks++; lastPossessionBlue=owner<11;
    if(state==1){if(closeBall()){owner=receiver;receiver=-1;ballFlying=false;state=0;eventText=stateName(owner)+" 패스 성공";newLog=true;shape();}return;}
@@ -781,21 +789,20 @@ public class MainActivity extends Activity {
    p.setColor(Color.LTGRAY);c.drawRect(l-dpv(10),t+fh*.43f,l,t+fh*.57f,p);c.drawRect(rr,t+fh*.43f,rr+dpv(10),t+fh*.57f,p);
    p.setStyle(Paint.Style.FILL);
    for(int i=0;i<22;i++){
-    float px=l+xy[i][0]*fw,py=t+xy[i][1]*fh;
-    float hx=headingX[i],hy=headingY[i],hl=(float)Math.sqrt(hx*hx+hy*hy);if(hl<.01f){hx=1;hy=0;hl=1;}hx/=hl;hy/=hl;
-    float sideX=-hy,sideY=hx,bob=(float)Math.sin(visualStep[i])*dpv(1.2f);
-    // shadow stays planted, body faces travel direction
-    p.setStyle(Paint.Style.FILL);p.setColor(Color.argb(65,0,0,0));c.drawOval(px-dpv(7),py+dpv(7),px+dpv(7),py+dpv(11),p);
-    p.setColor(i<11?Color.rgb(40,130,255):Color.rgb(235,64,64));
-    c.drawCircle(px,py+bob,dpv(7.2f),p);
-    // shoulders/direction nose
-    p.setStrokeWidth(dpv(2.2f));p.setColor(Color.WHITE);c.drawLine(px-hx*dpv(4),py-hy*dpv(4)+bob,px+hx*dpv(7),py+hy*dpv(7)+bob,p);
-    // alternating feet make motion readable even in 2D
-    float swing=(float)Math.sin(visualStep[i])*dpv(4.2f);
-    p.setStrokeWidth(dpv(2.5f));p.setColor(Color.rgb(225,225,225));
-    c.drawLine(px+sideX*dpv(3),py+sideY*dpv(3)+bob,px+sideX*dpv(3)+hx*swing,py+sideY*dpv(3)+hy*swing+dpv(7),p);
-    c.drawLine(px-sideX*dpv(3),py-sideY*dpv(3)+bob,px-sideX*dpv(3)-hx*swing,py-sideY*dpv(3)-hy*swing+dpv(7),p);
-    p.setColor(Color.WHITE);p.setTextSize(dpv(8));c.drawText(""+(i%11+1),px-dpv(2.5f),py+dpv(2.5f)+bob,p);
+    float px=l+xy[i][0]*fw,py=t+xy[i][1]*fh,hx=headingX[i],hy=headingY[i],hl=(float)Math.sqrt(hx*hx+hy*hy);if(hl<.01f){hx=1;hy=0;hl=1;}hx/=hl;hy/=hl;
+    float sx=-hy,sy=hx,phase=(float)Math.sin(visualStep[i]),bob=Math.abs(phase)*dpv(.8f);
+    p.setStyle(Paint.Style.FILL);p.setColor(Color.argb(70,0,0,0));c.drawOval(px-dpv(6),py+dpv(9),px+dpv(6),py+dpv(12),p);
+    // short SD torso
+    p.setStrokeWidth(dpv(4));p.setColor(i<11?Color.rgb(40,130,255):Color.rgb(235,64,64));
+    c.drawLine(px,py-dpv(1)-bob,px,py+dpv(5)-bob,p);
+    // oversized head
+    p.setColor(Color.rgb(244,205,170));c.drawCircle(px,py-dpv(7)-bob,dpv(5.4f),p);
+    // very short swinging arms and legs
+    p.setStrokeWidth(dpv(2.2f));p.setColor(i<11?Color.rgb(40,130,255):Color.rgb(235,64,64));
+    c.drawLine(px,py+dpv(1)-bob,px+sx*dpv(4)+hx*phase*dpv(2),py+sy*dpv(4)-bob,p);
+    c.drawLine(px,py+dpv(1)-bob,px-sx*dpv(4)-hx*phase*dpv(2),py-sy*dpv(4)-bob,p);
+    p.setColor(Color.WHITE);c.drawLine(px,py+dpv(5)-bob,px+sx*dpv(2)+hx*phase*dpv(3),py+dpv(10)-bob,p);c.drawLine(px,py+dpv(5)-bob,px-sx*dpv(2)-hx*phase*dpv(3),py+dpv(10)-bob,p);
+    p.setTextSize(dpv(6.5f));p.setColor(Color.rgb(30,30,30));c.drawText(""+(i%11+1),px-dpv(2),py-dpv(5)-bob,p);
    }
    // football: white body + black panels, not a plain dot
    float px=l+bx*fw,py=t+by*fh;p.setColor(Color.WHITE);c.drawCircle(px,py,dpv(6),p);p.setColor(Color.BLACK);c.drawCircle(px,py,dpv(2.2f),p);for(int k=0;k<5;k++){double a=k*Math.PI*2/5;c.drawCircle(px+(float)Math.cos(a)*dpv(3.7f),py+(float)Math.sin(a)*dpv(3.7f),dpv(1.1f),p);}
