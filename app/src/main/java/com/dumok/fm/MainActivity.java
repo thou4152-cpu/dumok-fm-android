@@ -544,6 +544,8 @@ public class MainActivity extends Activity {
   float[][] perceivedBall=new float[22][2];int[] scanAge=new int[22];
   float bx=.5f,by=.5f,btx=.5f,bty=.5f,ballVX=0f,ballVY=0f,ballFriction=.982f; int owner=0,receiver=-1,state=0,ticks=0,dribbleDef=-1,dribblePhase=0;
   float[] angularVel=new float[22],locomotionSpeed=new float[22];int[] recoveryUntil=new int[22];
+  int[] teamDuty=new int[22];float[][] coordinatedTarget=new float[22][2];
+  int pendingActor=-1,pendingAction=0,pendingReceiver=-1,pendingContactFrame=-1;float pendingX=.5f,pendingY=.5f,pendingPower=0f;
   float lastBallX=.5f,lastBallY=.5f;int ballIdleFrames=0,dribbleTouchClock=0;float dribbleTouchX=.5f,dribbleTouchY=.5f;
   // states: 0 possession, 1 pass, 2 through ball, 3 cross, 4 shot, 5 save/reset, 6 goal celebration, 7 one-v-one dribble
   boolean ballFlying=false,lastPossessionBlue=true,lastEventBlue=true,shotFlag,onTargetFlag,goalFlag,newLog=true;
@@ -562,6 +564,28 @@ public class MainActivity extends Activity {
    for(int i=0;i<22;i++){renderXY[i][0]=xy[i][0];renderXY[i][1]=xy[i][1];renderHeadingX[i]=1f;moveBlend[i]=0f;perceptionLag[i]=.72f+r.nextFloat()*.38f;riskMemory[i]=r.nextFloat();scanQuality[i]=.45f+.35f*norm(A(i,"dec"))+.20f*norm(A(i,"vis"));perceivedBall[i][0]=bx;perceivedBall[i][1]=by;scanAge[i]=r.nextInt(5);}
    owner=0;bx=xy[0][0];by=xy[0][1];dribbleTouchX=bx;dribbleTouchY=by;h.post(anim);
   }
+  // V6 Collective Coordination + physical contact actions.
+  float pressCandidateScore(int i,boolean blue,float ballX,float ballY){
+   float dx=ballX-xy[i][0],dy=ballY-xy[i][1],d=(float)Math.sqrt(dx*dx+dy*dy),sp=Math.max(.0008f,speedStateMax(i,locomotionSpeed[i])),eta=d/sp;
+   float dl=Math.max(.001f,d),approach=(headingX[i]*dx/dl+headingY[i]*dy/dl+1f)*.5f,goal=blue?.055f:.945f;
+   float goalSide=blue?(xy[i][0]<=ballX?1f:0f):(xy[i][0]>=ballX?1f:0f),cover=0f;
+   int lo=blue?0:11,hi=lo+11;for(int k=lo;k<hi;k++)if(k!=i&&active(k)){float cx=xy[k][0]-(ballX+(goal-ballX)*.28f),cy=xy[k][1]-ballY;if(cx*cx+cy*cy<.018f){cover=1f;break;}}
+   return -eta*.012f+.25f*approach+.23f*goalSide+.18f*cover+.10f*norm(A(i,"work"));
+  }
+  void assignDefensiveDuties(boolean blue,float ballX,float ballY){
+   int lo=blue?0:11,hi=lo+11,p1=-1,p2=-1;float a=-999f,b=-999f;
+   for(int i=lo;i<hi;i++){if(!active(i)||i%11==0)continue;float sc=pressCandidateScore(i,blue,ballX,ballY);if(sc>a){b=a;p2=p1;a=sc;p1=i;}else if(sc>b){b=sc;p2=i;}}
+   for(int i=lo;i<hi;i++){if(!active(i))continue;if(animFrame<recoveryUntil[i])teamDuty[i]=6;else if(i==p1)teamDuty[i]=1;else if(i==p2&&pressIntensity.equals("높음"))teamDuty[i]=2;else{float bp=blue?base[i][0]:1f-base[i][0],c=Math.abs(base[i][1]-.5f);teamDuty[i]=bp<.31f?5:c<.20f?3:4;}}
+  }
+  float teammateIntentCrowd(int j,float tx,float ty,boolean blue){int lo=blue?0:11,hi=lo+11;float v=0;for(int k=lo;k<hi;k++){if(k==j||!active(k))continue;float dx=coordinatedTarget[k][0]-tx,dy=coordinatedTarget[k][1]-ty,d=(float)Math.sqrt(dx*dx+dy*dy);if(d<.13f)v+=1f-d/.13f;}return Math.min(1f,v/2.2f);}
+  void coordinateTeamShape(boolean blue,float ballX,float ballY){int lo=blue?0:11,hi=lo+11;for(int i=lo;i<hi;i++){coordinatedTarget[i][0]=dest[i][0];coordinatedTarget[i][1]=dest[i][1];}
+   for(int i=lo;i<hi;i++){if(!active(i)||i==owner)continue;float tx=dest[i][0],ty=dest[i][1],crowd=teammateIntentCrowd(i,tx,ty,blue);if(crowd>.20f){float side=base[i][1]<.5f?-1f:1f;ty=clip(ty+side*(.055f+.075f*crowd));}
+    if(Math.abs(base[i][1]-.5f)>.25f&&Math.abs(ballY-.5f)<.30f)ty=clip(.72f*ty+.28f*base[i][1]);if(teamDuty[i]==5)tx=clip(blue?Math.min(tx,ballX-.09f):Math.max(tx,ballX+.09f));coordinatedTarget[i][0]=tx;coordinatedTarget[i][1]=ty;dest[i][0]=tx;dest[i][1]=ty;}}
+  void applyDutyTarget(int j,boolean blue,float ballX,float ballY,float[] out){float dir=attackDir(blue),ownGoal=blue?.055f:.945f;if(teamDuty[j]==1){out[0]=ballX-dir*.018f;out[1]=ballY;}else if(teamDuty[j]==2){out[0]=ballX-dir*.075f;out[1]=clip(.65f*ballY+.35f*.5f);}else if(teamDuty[j]==3){out[0]=clip(ballX-dir*.13f);out[1]=clip(.58f*ballY+.42f*.5f);}else if(teamDuty[j]==5){out[0]=clip(.72f*out[0]+.28f*ownGoal);out[1]=clip(.82f*out[1]+.18f*.5f);}}
+  void queueKick(int actor,int action,int recv,float tx,float ty,float power){if(actor<0||owner!=actor)return;pendingActor=actor;pendingAction=action;pendingReceiver=recv;pendingX=tx;pendingY=ty;pendingPower=power;float dx=tx-xy[actor][0],dy=ty-xy[actor][1],a=(float)Math.atan2(dy,dx);headingX[actor]=(float)Math.cos(a);headingY[actor]=(float)Math.sin(a);pendingContactFrame=animFrame+5+(int)(4*(1f-norm(A(actor,"tech"))));roleState[actor]=7;}
+  void resolvePhysicalAction(){if(pendingActor<0||animFrame<pendingContactFrame)return;int a=pendingActor;if(owner!=a||!active(a)){pendingActor=-1;pendingAction=0;return;}float footReach=.018f+.004f*norm(A(a,"tech")),footX=xy[a][0]+headingX[a]*footReach,footY=xy[a][1]+headingY[a]*footReach;
+   float dx=bx-footX,dy=by-footY,d=(float)Math.sqrt(dx*dx+dy*dy);if(d>.0215f){pendingActor=-1;pendingAction=0;requestTacticalRescan();return;}
+   receiver=pendingReceiver;state=pendingAction;lastPasser=a;lastEventBlue=a<11;kickBall(pendingX,pendingY,pendingPower);pendingActor=-1;pendingAction=0;pendingContactFrame=-1;}
   // V5 locomotion + ball physics. Football brain chooses intent; this layer alone moves bodies and ball.
   float angleDiff(float a,float b){float d=b-a;while(d>(float)Math.PI)d-=6.2831853f;while(d<-(float)Math.PI)d+=6.2831853f;return d;}
   float speedStateMax(int i,float current){
@@ -630,6 +654,7 @@ public class MainActivity extends Activity {
    for(int i=0;i<22;i++){prevXY[i][0]=xy[i][0];prevXY[i][1]=xy[i][1];}
    for(int i=0;i<22;i++){if(active(i))integratePlayer(i);}
    sanitizeGoalAreas();
+   resolvePhysicalAction();
    if(ballFlying){integrateBall();}
    else if(owner>=0&&active(owner)){float spd=(float)Math.sqrt(vel[owner][0]*vel[owner][0]+vel[owner][1]*vel[owner][1]);float hx=headingX[owner],hy=headingY[owner],hl=(float)Math.sqrt(hx*hx+hy*hy);if(hl<.01f){hx=owner<11?1f:-1f;hy=0;hl=1;}hx/=hl;hy/=hl;
     dribbleTouchClock++;int touchEvery=state==7?5:(spd>.0021f?7:10);if(dribbleTouchClock>=touchEvery){dribbleTouchClock=0;float lead=state==7?.024f:(.012f+Math.min(.012f,spd*4.2f));dribbleTouchX=clip(xy[owner][0]+hx*lead);dribbleTouchY=clip(xy[owner][1]+hy*lead);}
@@ -655,11 +680,22 @@ public class MainActivity extends Activity {
     }
    }
   }
+  float looseBallClaimScore(int i){
+   if(!active(i))return -99f;float dx=bx-xy[i][0],dy=by-xy[i][1],d=(float)Math.sqrt(dx*dx+dy*dy);
+   float sp=Math.max(.0007f,speedStateMax(i,locomotionSpeed[i])),eta=d/sp;
+   float dl=Math.max(.001f,d),toward=(headingX[i]*dx/dl+headingY[i]*dy/dl+1f)*.5f;
+   boolean blue=i<11;float contest=spaceAt(bx,by,blue),duty=(teamDuty[i]==1||teamDuty[i]==6)?.16f:teamDuty[i]==5?-.10f:0f;
+   return -eta*.012f+.22f*toward+.18f*contest+duty+.08f*norm(A(i,"ant"));
+  }
+  int bestLooseBallClaimant(){
+   int best=-1;float score=-999f;for(int i=0;i<22;i++){float v=looseBallClaimScore(i);if(v>score){score=v;best=i;}}return best;
+  }
   void ballContinuityWatch(){
+   if(pendingActor>=0)return;
    float dx=bx-lastBallX,dy=by-lastBallY,m=dx*dx+dy*dy;lastBallX=bx;lastBallY=by;
    if(m<.0000007f)ballIdleFrames++;else ballIdleFrames=0;
-   if(ballFlying){if(ballIdleFrames>45){bx=btx;by=bty;if(receiver>=0&&(state==1||state==2||state==3)){owner=receiver;receiver=-1;state=0;ballFlying=false;shape();}ballIdleFrames=0;}return;}
-   if(owner<0){int n=nearestToBall();dest[n][0]=bx;dest[n][1]=by;if(distToBall(n)<.035f){owner=n;state=0;receiver=-1;ballFlying=false;ballIdleFrames=0;}return;}
+   if(ballFlying){if(ballIdleFrames>90){ballFlying=false;ballVX=ballVY=0f;receiver=-1;state=0;requestTacticalRescan();}return;}
+   if(owner<0){int n=bestLooseBallClaimant();if(n>=0){dest[n][0]=bx;dest[n][1]=by;if(distToBall(n)<.030f){owner=n;state=0;receiver=-1;ballFlying=false;ballVX=ballVY=0f;ballIdleFrames=0;requestTacticalRescan();}}return;}
    // A stationary keeper must distribute; an outfield carrier must make a football action.
    if(ballIdleFrames>75&&state==0){boolean blue=owner<11;if(owner%11==0)pass(blue);else if(inBox(owner)&&(owner%11)>=8)shoot(blue);else pass(blue);ballIdleFrames=0;}
   }
@@ -819,19 +855,19 @@ public class MainActivity extends Activity {
    requestTacticalRescan();snapshotOffside(blue);lastPasser=owner;lastActionThreat=laneThreat(xy[owner][0],xy[owner][1],blue);int best=chooseUniversalPass(owner,blue);
    if(best<0)best=nearestMate(owner,xy[owner][0],xy[owner][1]);if(best<0)return;
    receiver=best;state=1;lastEventBlue=blue;float pd=dist(owner,receiver),lead=.025f+.035f*passQ(owner);btx=clip(xy[receiver][0]+vel[receiver][0]*lead*900f);bty=clip(xy[receiver][1]+vel[receiver][1]*lead*900f);
-   float power=.0072f+.0105f*Math.min(1f,pd/.42f)+.0022f*passQ(owner);kickBall(btx,bty,power);
-   int bypass=opponentsBypassed(lastPasser,best,blue);eventText=bypass>=2?"↗ 전진 패스":"→ 패스";newLog=true;
+   float power=.0072f+.0105f*Math.min(1f,pd/.42f)+.0022f*passQ(owner);int actor=owner;queueKick(actor,1,best,btx,bty,power);
+   int bypass=opponentsBypassed(actor,best,blue);eventText=bypass>=2?"↗ 전진 패스":"→ 패스";newLog=true;
   }
   void through(boolean blue){
    requestTacticalRescan();snapshotOffside(blue);lastPasser=owner;lastActionThreat=laneThreat(xy[owner][0],xy[owner][1],blue);int b=blue?0:11,best=-1;float bs=-99f;
    for(int i=b;i<b+11;i++){if(!active(i)||i==owner||!isForwardRole(i)||isOffsideSnapshot(owner,i,blue))continue;float sc=laneThreat(xy[i][0],xy[i][1],blue)+spaceAt(xy[i][0],xy[i][1],blue);if(sc>bs){bs=sc;best=i;}}
-   if(best<0){awardOffside(blue);return;}receiver=best;float dir=blue?.12f:-.12f;dest[receiver][0]=clip(xy[receiver][0]+dir);btx=dest[receiver][0];bty=dest[receiver][1];state=2;lastEventBlue=blue;kickBall(btx,bty,.0195f+.0035f*passQ(lastPasser));eventText="⇢ 스루패스!";newLog=true;
+   if(best<0){awardOffside(blue);return;}receiver=best;float dir=blue?.12f:-.12f;dest[receiver][0]=clip(xy[receiver][0]+dir);btx=dest[receiver][0];bty=dest[receiver][1];lastEventBlue=blue;queueKick(owner,2,best,btx,bty,.0195f+.0035f*passQ(owner));eventText="⇢ 스루패스 준비";newLog=true;
   }
   void cross(boolean blue){
-   requestTacticalRescan();snapshotOffside(blue);lastPasser=owner;lastActionThreat=laneThreat(xy[owner][0],xy[owner][1],blue);int b=blue?0:11,best=-1;float bs=-99f;for(int i=b;i<b+11;i++){if(!active(i)||i==owner||isOffsideSnapshot(owner,i,blue))continue;float central=1f-Math.min(1f,Math.abs(xy[i][1]-.5f)*2f),sc=.62f*laneThreat(xy[i][0],xy[i][1],blue)+.38f*central;if(sc>bs){bs=sc;best=i;}}if(best<0){awardOffside(blue);return;}receiver=best;dest[receiver][0]=blue?.83f:.17f;dest[receiver][1]=clip(.5f+(xy[receiver][1]-.5f)*.35f);btx=dest[receiver][0];bty=dest[receiver][1];state=3;lastEventBlue=blue;kickBall(btx,bty,.0225f+.0030f*norm(A(lastPasser,"cross")));eventText="⤴ 크로스";newLog=true;
+   requestTacticalRescan();snapshotOffside(blue);lastPasser=owner;lastActionThreat=laneThreat(xy[owner][0],xy[owner][1],blue);int b=blue?0:11,best=-1;float bs=-99f;for(int i=b;i<b+11;i++){if(!active(i)||i==owner||isOffsideSnapshot(owner,i,blue))continue;float central=1f-Math.min(1f,Math.abs(xy[i][1]-.5f)*2f),sc=.62f*laneThreat(xy[i][0],xy[i][1],blue)+.38f*central;if(sc>bs){bs=sc;best=i;}}if(best<0){awardOffside(blue);return;}receiver=best;dest[receiver][0]=blue?.83f:.17f;dest[receiver][1]=clip(.5f+(xy[receiver][1]-.5f)*.35f);btx=dest[receiver][0];bty=dest[receiver][1];lastEventBlue=blue;queueKick(owner,3,best,btx,bty,.0225f+.0030f*norm(A(owner,"cross")));eventText="⤴ 크로스 준비";newLog=true;
   }
   void shoot(boolean blue){
-   receiver=-1;state=4;lastEventBlue=blue;btx=blue?.985f:.015f;bty=.38f+r.nextFloat()*.24f;kickBall(btx,bty,.031f+.008f*finishQ(owner));eventText="💥 슈팅!";newLog=true;
+   receiver=-1;lastEventBlue=blue;btx=blue?.985f:.015f;bty=.38f+r.nextFloat()*.24f;queueKick(owner,4,-1,btx,bty,.031f+.008f*finishQ(owner));eventText="💥 슈팅 준비";newLog=true;
   }
   boolean closeBall(){
    if(receiver>=0&&(state==1||state==2||state==3)){float dx=bx-xy[receiver][0],dy=by-xy[receiver][1],rvx=ballVX-vel[receiver][0],rvy=ballVY-vel[receiver][1];float rel=(float)Math.sqrt(rvx*rvx+rvy*rvy);return dx*dx+dy*dy<(.00042f+.00020f*Math.min(1f,rel/.02f));}
@@ -839,7 +875,7 @@ public class MainActivity extends Activity {
   }
   boolean consumeShot(){boolean q=shotFlag;shotFlag=false;return q;} boolean consumeOnTarget(){boolean q=onTargetFlag;onTargetFlag=false;return q;} boolean consumeGoal(){boolean q=goalFlag;goalFlag=false;return q;}
   String stateName(int i){return i<11?"BLUE":"RED";}
-  void resetKickoff(int team){owner=team+6;receiver=-1;dribbleDef=-1;dribblePhase=0;state=0;ballFlying=false;ballVX=ballVY=0f;bx=.5f;by=.5f;xy[owner][0]=dest[owner][0]=.5f;xy[owner][1]=dest[owner][1]=.5f;eventText="센터서클에서 킥오프";newLog=true;ticks=0;shape();}
+  void resetKickoff(int team){owner=team+6;receiver=-1;dribbleDef=-1;dribblePhase=0;state=0;ballFlying=false;pendingActor=-1;pendingAction=0;pendingContactFrame=-1;ballVX=ballVY=0f;bx=.5f;by=.5f;xy[owner][0]=dest[owner][0]=.5f;xy[owner][1]=dest[owner][1]=.5f;eventText="센터서클에서 킥오프";newLog=true;ticks=0;shape();}
   int nearestPlayerTo(float x,float y,boolean blueTeam){int lo=blueTeam?0:11,hi=lo+11,best=-1;float bd=99;for(int i=lo;i<hi;i++){if(!active(i))continue;float dx=xy[i][0]-x,dy=xy[i][1]-y,d=dx*dx+dy*dy;if(d<bd){bd=d;best=i;}}return best;}
   int nearestOpponent(int me){int lo=me<11?11:0,hi=lo+11,best=-1;float bd=99;for(int i=lo;i<hi;i++){if(!active(i))continue;float dx=xy[i][0]-xy[me][0],dy=xy[i][1]-xy[me][1],d=dx*dx+dy*dy;if(d<bd){bd=d;best=i;}}return best;}
   float A(int i,String a){Player q=simPlayer[i];if(q==null)return 10f;
@@ -1123,7 +1159,7 @@ public class MainActivity extends Activity {
     if(local!=0){if(j<11&&tx>.915f)tx=.895f;if(j>=11&&tx<.085f)tx=.105f;}
     // Movement Intelligence: keep an intention briefly, then re-scan and choose again.
     if(intentHold[j]<=0){moveIntent[j]=attacking?chooseAttackIntent(j,blue,ballX,ballY):chooseDefendIntent(j,blue,ballX,ballY);float iq0=.45f*norm(A(j,"dec"))+.30f*norm(A(j,"off"))+.25f*norm(A(j,"con"));intentHold[j]=Math.max(2,8-(int)(5*iq0));}else intentHold[j]--;
-    float[] mi={tx,ty};float seenX=perceivedBall[j][0],seenY=perceivedBall[j][1];if(attacking)applyAttackIntent(j,moveIntent[j],blue,seenX,seenY,mi);else{applyDefendIntent(j,moveIntent[j],blue,seenX,seenY,mi);applyRecoveryTarget(j,blue,seenX,seenY,mi);}
+    float[] mi={tx,ty};float seenX=perceivedBall[j][0],seenY=perceivedBall[j][1];if(attacking)applyAttackIntent(j,moveIntent[j],blue,seenX,seenY,mi);else{applyDefendIntent(j,moveIntent[j],blue,seenX,seenY,mi);applyDutyTarget(j,blue,seenX,seenY,mi);applyRecoveryTarget(j,blue,seenX,seenY,mi);}
     if(attacking&&j!=owner){float[] emerg={mi[0],mi[1]};chooseEmergentDestination(j,blue,seenX,seenY,emerg);float trust=.38f+.42f*decisionConfidence[j];mi[0]=mi[0]*(1f-trust)+emerg[0]*trust;mi[1]=mi[1]*(1f-trust)+emerg[1]*trust;}
     tx=mi[0];ty=mi[1];
     // Perception/decisions alter reaction quality without changing football principles themselves.
@@ -1139,7 +1175,8 @@ public class MainActivity extends Activity {
    if(!forceTacticalScan&&!possessionChanged&&!actionChanged&&!dangerousEntry&&animFrame%7!=0)return;
    if(forceTacticalScan||possessionChanged||actionChanged||dangerousEntry)for(int i=0;i<22;i++)intentHold[i]=0;
    for(int i=0;i<22;i++)if(active(i))scanWorld(i,ballX,ballY);
-   footballPrinciples(blue,ballX,ballY);lastScanOwner=owner;lastScanState=state;forceTacticalScan=false;
+   assignDefensiveDuties(!blue,ballX,ballY);footballPrinciples(blue,ballX,ballY);
+   coordinateTeamShape(true,ballX,ballY);coordinateTeamShape(false,ballX,ballY);lastScanOwner=owner;lastScanState=state;forceTacticalScan=false;
   }
   int secondNearestDefender(float x,float y,boolean blueTeam,int first){int lo=blueTeam?0:11,hi=lo+11,best=lo;float bd=99;for(int i=lo;i<hi;i++){if(!active(i)||i==first||i%11==0)continue;float dx=xy[i][0]-x,dy=xy[i][1]-y,d=dx*dx+dy*dy;if(d<bd){bd=d;best=i;}}return best;}
   int bestMarkFor(int defender,boolean possessionBlue){int atk=possessionBlue?0:11,best=-1;float bs=-99f;boolean defBlue=defender<11;for(int i=atk;i<atk+11;i++){if(!active(i)||i%11==0)continue;float dx=xy[i][0]-xy[defender][0],dy=xy[i][1]-xy[defender][1],d=(float)Math.sqrt(dx*dx+dy*dy);float threat=laneThreat(xy[i][0],xy[i][1],possessionBlue),run=(moveIntent[i]==2||moveIntent[i]==4||moveIntent[i]==5||moveIntent[i]==6)?.24f:0f,central=.10f*(1f-Math.min(1f,Math.abs(xy[i][1]-.5f)*2f));float sc=.48f*threat+.20f*(1f-Math.min(1f,d/.35f))+run+central;if(sc>bs){bs=sc;best=i;}}return best;}
